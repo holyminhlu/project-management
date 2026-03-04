@@ -53,3 +53,20 @@ ALTER COLUMN tieu_de NVARCHAR(200);
 
 ALTER TABLE bao_cao
 ALTER COLUMN noi_dung NVARCHAR(1000);
+
+USE quanly_duan;
+
+DELETE FROM tao_bao_cao;
+DELETE FROM bao_cao;
+DELETE FROM nhac_nho;
+DELETE FROM binh_luan_cong_viec;
+DELETE FROM phu_trach;
+DELETE FROM cong_viec;
+DELETE FROM du_an;
+DELETE FROM thanh_vien_nhom;
+DELETE FROM nhom_nhan_vien;
+DELETE FROM nhan_vien;
+DELETE FROM phong_ban;
+DELETE FROM vai_tro;
+
+select * from cong_viec

@@ -10,6 +10,7 @@ type BackendLoginResponse = {
   accessToken?: string;
   refreshToken?: string;
   expiresIn?: number;
+  refreshExpiresIn?: number;
   error?: string;
 };
 
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Vui lòng nhập email và mật khẩu." }, { status: 400 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
     const backendResponse = await fetch(`${backendUrl}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,11 +48,12 @@ export async function POST(request: Request) {
     }
 
     const accessMaxAge = typeof data.expiresIn === "number" ? data.expiresIn : 60 * 15;
-    const refreshMaxAge = 60 * 60 * 24 * 7;
+    const refreshMaxAge = typeof data.refreshExpiresIn === "number" ? data.refreshExpiresIn : 60 * 60 * 24 * 7;
 
     const response = NextResponse.json({
       message: data.message ?? "Đăng nhập thành công.",
       user: data.user,
+      accessToken: data.accessToken,
     });
 
     response.cookies.set("pm_access", data.accessToken, {

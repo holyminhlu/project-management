@@ -21,6 +21,7 @@ export default function AvatarMenu({ initials, displayName }: Props) {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
+      localStorage.removeItem("pm_access_token");
       setOpen(false);
       router.push("/");
       router.refresh();

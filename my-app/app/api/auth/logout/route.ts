@@ -5,7 +5,7 @@ export async function POST() {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get("pm_refresh")?.value;
 
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
 
   try {
     if (refreshToken) {

@@ -79,12 +79,26 @@ VALUES
 ('CV02','DA01',N'Xây dựng API',N'Code API backend',N'Cần thực hiện',N'Cao','2025-04-01'),
 ('CV03','DA02',N'Thiết kế giao diện',N'UI/UX website',N'Hoàn thành',N'Trung bình','2024-07-01'),
 ('CV04','DA03',N'Chạy quảng cáo Facebook',N'Thiết lập chiến dịch ads',N'Đang thực hiện',N'Cao','2025-12-20'),
-('CV05','DA04',N'Đăng tin tuyển dụng',N'Đăng tin lên các nền tảng',N'Hoàn thành',N'Thấp','2025-01-15');
+('CV05','DA04',N'Đăng tin tuyển dụng',N'Đăng tin lên các nền tảng',N'Hoàn thành',N'Thấp','2025-01-15'),
+
+('CV06','DA01',N'Thiết kế Giao diện',N'Thiết kế giao diện bằng React',N'Đang thực hiện',N'Cao','2025-03-01'),
+('CV07','DA01',N'Bảo mật tài khoản',N'Thêm các cơ chế bảo mật',N'Cần thực hiện',N'Cao','2025-04-01'),
+('CV08','DA01',N'Phân quyền người dùng',N'Phân quyền người dùng trên hệ thống',N'Cần thực hiện',N'Cao','2025-03-01'),
+('CV09','DA01',N'Phát thảo Wireframe',N'Phát thảo giao diện trên Figma',N'Đã hoàn thành',N'Cao','2025-04-01');
 
 -- ========================
 -- 8. BẢNG PHỤ TRÁCH
 -- ========================
 INSERT INTO phu_trach VALUES
+('CV06','NV01'),
+('CV07','NV01'),
+('CV08','NV01'),
+('CV09','NV01'),
+
+('CV03','NV01'),
+('CV04','NV01'),
+('CV05','NV01'),
+('CV02','NV01'),
 ('CV01','NV01'),
 ('CV02','NV03'),
 ('CV03','NV04'),

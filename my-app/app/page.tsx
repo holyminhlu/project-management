@@ -42,11 +42,15 @@ export default function LoginPage() {
         }),
       });
 
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as { error?: string; accessToken?: string };
 
       if (!response.ok) {
         setError(data.error ?? "Đăng nhập thất bại.");
         return;
+      }
+
+      if (data.accessToken) {
+        localStorage.setItem("pm_access_token", data.accessToken);
       }
 
       router.push("/home");
