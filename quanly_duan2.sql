@@ -4,41 +4,41 @@ use quanly_duan
 -- ========================
 -- BẢNG VAI TRÒ
 -- ========================
-/*CREATE TABLE vai_tro (
+CREATE TABLE vai_tro (
     ma_vai_tro VARCHAR(25) PRIMARY KEY,
-    ten_vai_tro VARCHAR(50)
-);*/
+    ten_vai_tro NVARCHAR(50)
+);
 
 -- ========================
 -- BẢNG PHÒNG BAN
 -- ========================
-/*CREATE TABLE phong_ban (
+CREATE TABLE phong_ban (
     ma_phong_ban VARCHAR(25) PRIMARY KEY,
-    ten_phong_ban VARCHAR(100),
+    ten_phong_ban NVARCHAR(100),
     ngay_tao_phong_ban DATETIME DEFAULT GETDATE()
-);*/
+);
 
 -- ========================
 -- BẢNG NHÂN VIÊN
 -- ========================
-/*CREATE TABLE nhan_vien (
+CREATE TABLE nhan_vien (
     ma_nhan_vien VARCHAR(25) PRIMARY KEY,
     ma_vai_tro VARCHAR(25),
     ma_phong_ban VARCHAR(25),
-    ten_nv VARCHAR(100),
+    ten_nv NVARCHAR(100),
     email VARCHAR(100) UNIQUE,
     password VARCHAR(255),
-    trang_thai_hoat_dong VARCHAR(20),
+    trang_thai_hoat_dong NVARCHAR(20),
     ngay_tao_nhan_vien DATETIME DEFAULT GETDATE(),
 
     FOREIGN KEY (ma_vai_tro) REFERENCES vai_tro(ma_vai_tro),
     FOREIGN KEY (ma_phong_ban) REFERENCES phong_ban(ma_phong_ban)
 );
-*/
+
 -- ========================
 -- BẢNG NHÓM
 -- ========================
-/*CREATE TABLE nhom_nhan_vien (
+CREATE TABLE nhom_nhan_vien (
     ma_nhom VARCHAR(25) PRIMARY KEY,
     ten_nhom VARCHAR(100),
     thong_tin NVARCHAR(MAX),
@@ -46,7 +46,7 @@ use quanly_duan
     ngay_tao_nhom DATETIME DEFAULT GETDATE(),
 
     FOREIGN KEY (nguoi_dung_nhom) REFERENCES nhan_vien(ma_nhan_vien)
-);*/
+);
 
 -- ========================
 -- BẢNG THÀNH VIÊN NHÓM

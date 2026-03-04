@@ -1,26 +1,17 @@
 import { NextResponse } from "next/server";
-import type { RowDataPacket } from "mysql2";
-import pool from "../../../../lib/db";
-import { createAuthCookie } from "../../../../lib/auth";
 
-type EmployeeRow = RowDataPacket & {
-  ma_nhan_vien: string;
-  ten_nv: string;
-  email: string;
-  password: string;
-  trang_thai_hoat_dong: string | null;
+type BackendLoginResponse = {
+  message?: string;
+  user?: {
+    ma_nhan_vien: string;
+    ten_nv: string;
+    email: string;
+  };
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  error?: string;
 };
-
-function normalizeStatus(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[\s_-]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
 
 export async function POST(request: Request) {
   try {
@@ -32,54 +23,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Vui lòng nhập email và mật khẩu." }, { status: 400 });
     }
 
-    const [rows] = await pool.query<EmployeeRow[]>(
-      `SELECT ma_nhan_vien, ten_nv, email, password, trang_thai_hoat_dong
-       FROM nhan_vien
-       WHERE email = ?
-       LIMIT 1`,
-      [email],
-    );
-
-    const employee = rows[0];
-    if (!employee) {
-      return NextResponse.json({ error: "Tài khoản hoặc mật khẩu không đúng." }, { status: 401 });
-    }
-
-    if (employee.password !== password) {
-      return NextResponse.json({ error: "Tài khoản hoặc mật khẩu không đúng." }, { status: 401 });
-    }
-
-    if (
-      employee.trang_thai_hoat_dong &&
-      !["active", "hoat_dong", "hoatdong", "1", "true"].includes(
-        normalizeStatus(employee.trang_thai_hoat_dong),
-      )
-    ) {
-      return NextResponse.json({ error: "Tài khoản hiện không hoạt động." }, { status: 403 });
-    }
-
-    const sessionPayload = await createAuthCookie({
-      ma_nhan_vien: employee.ma_nhan_vien,
-      email: employee.email,
-      ten_nv: employee.ten_nv,
-      login_at: Date.now(),
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+    const backendResponse = await fetch(`${backendUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
     });
+
+    const data = (await backendResponse
+      .json()
+      .catch(() => ({}))) as BackendLoginResponse;
+
+    if (!backendResponse.ok) {
+      return NextResponse.json(
+        { error: data.error ?? "Đăng nhập thất bại." },
+        { status: backendResponse.status },
+      );
+    }
+
+    if (!data.accessToken || !data.refreshToken || !data.user) {
+      return NextResponse.json({ error: "Phản hồi đăng nhập không hợp lệ." }, { status: 502 });
+    }
+
+    const accessMaxAge = typeof data.expiresIn === "number" ? data.expiresIn : 60 * 15;
+    const refreshMaxAge = 60 * 60 * 24 * 7;
 
     const response = NextResponse.json({
-      message: "Đăng nhập thành công.",
-      user: {
-        ma_nhan_vien: employee.ma_nhan_vien,
-        ten_nv: employee.ten_nv,
-        email: employee.email,
-      },
+      message: data.message ?? "Đăng nhập thành công.",
+      user: data.user,
     });
 
-    response.cookies.set("pm_auth", sessionPayload, {
+    response.cookies.set("pm_access", data.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 8,
+      maxAge: accessMaxAge,
+    });
+
+    response.cookies.set("pm_refresh", data.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: refreshMaxAge,
+    });
+
+    // Remove legacy cookie if it exists.
+    response.cookies.set("pm_auth", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
     });
 
     return response;
