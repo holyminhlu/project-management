@@ -69,6 +69,12 @@ VALUES
 ('DA04','N04','PB03',N'Tuyển dụng Q1',N'Tuyển dụng nhân sự quý 1',N'Hoàn thành','2025-01-01','2025-03-31'),
 ('DA05','N05','PB04',N'Kiểm toán nội bộ',N'Kiểm toán tài chính nội bộ',N'Chưa bắt đầu','2025-07-01','2025-09-01');
 
+
+INSERT INTO du_an
+(ma_du_an, ma_nhom, ma_phong_ban, ten_du_an, mo_ta, trang_thai_du_an, ngay_bat_dau, ngay_ket_thuc)
+VALUES
+('DA06','N01','PB01',N'Hệ thống quản lý máy in',N'Xây dựng phần mềm quản lý máy in',N'Đã bị gỡ','2025-01-01','2025-06-30'),
+('DA07','N02','PB01',N'Website phân công công việc',N'Thiết kế website chính thức',N'Đã bị gỡ','2024-02-01','2025-10-01');
 -- ========================
 -- 7. BẢNG CÔNG VIỆC
 -- ========================
@@ -145,3 +151,52 @@ INSERT INTO tao_bao_cao VALUES
 ('BC03','NV04'),
 ('BC04','NV03'),
 ('BC05','NV05');
+
+
+use quanly_duan
+-- ========================
+-- 1. BẢNG VAI TRÒ
+-- ========================
+INSERT INTO vai_tro VALUES
+('VT01', N'Quản trị hệ thống'),
+('VT02', N'Trưởng phòng'),
+('VT03', N'Trưởng nhóm'),
+('VT04', N'Nhân viên'),
+('VT05', N'Thực tập sinh');
+
+-- ========================
+-- 2. BẢNG PHÒNG BAN
+-- ========================
+INSERT INTO phong_ban (ma_phong_ban, ten_phong_ban) VALUES
+('PB01', N'Phòng Công nghệ thông tin'),
+('PB02', N'Phòng Marketing'),
+('PB03', N'Phòng Nhân sự'),
+('PB04', N'Phòng Tài chính'),
+('PB05', N'Phòng Kinh doanh');
+
+-- ========================
+-- 3. BẢNG NHÂN VIÊN
+-- ========================
+INSERT INTO nhan_vien 
+(ma_nhan_vien, ma_vai_tro, ma_phong_ban, ten_nv, email, password, trang_thai_hoat_dong)
+VALUES
+('NV08','VT04','PB01',N'Nguyễn Văn Sinh','sinh@company.com','123456',N'Hoạt động'),
+('NV09','VT04','PB01',N'Trần Thị Ngọ','ngo@company.com','123456',N'Hoạt động'),
+('NV10','VT04','PB01',N'Lê Hoàng Huy','hhuy@company.com','123456',N'Hoạt động'),
+('NV11','VT04','PB01',N'Phạm Minh Mẫn','man@company.com','123456',N'Hoạt động'),
+('NV12','VT04','PB01',N'Đỗ Thị Quế','que@company.com','123456',N'Tạm nghỉ'),
+('NV13','VT04','PB02',N'Ngô Quốc Việt','viet@company.com','123456',N'Hoạt động'),
+('NV14','VT04','PB02',N'Võ Thanh Thưởng','thuong@company.com','123456',N'Hoạt động'),
+('NV15','VT04','PB02',N'Nguyễn Hoài Nam','hnam@company.com','123456',N'Hoạt động'),
+('NV16','VT04','PB02',N'Trần Thị Khiêm','khiem@company.com','123456',N'Hoạt động'),
+('NV17','VT04','PB02',N'Lê Hoàng Minh Nhật','nhat@company.com','123456',N'Hoạt động'),
+('NV18','VT04','PB03',N'Phạm Tấn Mãi','mai@company.com','123456',N'Hoạt động'),
+('NV19','VT04','PB03',N'Đỗ Quế Minh','minh@company.com','123456',N'Tạm nghỉ'),
+('NV20','VT04','PB03',N'Ngô Thanh Thanh','thanh@company.com','123456',N'Hoạt động'),
+('NV21','VT04','PB03',N'Võ Thanh Nhật','tnhat@company.com','123456',N'Hoạt động'),
+('NV22','VT04','PB03',N'Trần Thị Mai Minh','mminh@company.com','123456',N'Hoạt động'),
+('NV23','VT04','PB04',N'Lê Minh Mẫn','mman@company.com','123456',N'Hoạt động'),
+('NV24','VT04','PB04',N'Phạm Phước Toàn','toan@company.com','123456',N'Hoạt động'),
+('NV25','VT04','PB04',N'Đỗ Thị Lan Hương','huong@company.com','123456',N'Tạm nghỉ'),
+('NV26','VT04','PB04',N'Ngô Thanh Ngân','ngan@company.com','123456',N'Hoạt động'),
+('NV27','VT04','PB04',N'Võ Hoàng Tất','tat@company.com','123456',N'Hoạt động');

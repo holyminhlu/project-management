@@ -142,6 +142,49 @@ async function generateTaskCode(pool) {
   throw new Error("Không thể tạo mã công việc theo thứ tự.");
 }
 
+async function generateProjectCode(pool) {
+  const maxResult = await pool.request().query(
+    `SELECT
+        ISNULL(MAX(TRY_CONVERT(INT, SUBSTRING(ma_du_an, 3, LEN(ma_du_an) - 2))), 0) AS max_index
+     FROM dbo.du_an
+     WHERE ma_du_an LIKE 'DA[0-9]%'`,
+  );
+
+  let nextIndex = Number(maxResult.recordset[0]?.max_index || 0) + 1;
+
+  for (let i = 0; i < 30; i += 1) {
+    const code = `DA${nextIndex}`;
+    const exists = await pool.request().input("ma_du_an", sql.VarChar(25), code).query(
+      `SELECT TOP 1 ma_du_an
+       FROM dbo.du_an
+       WHERE ma_du_an = @ma_du_an`,
+    );
+    if (!exists.recordset[0]) return code;
+    nextIndex += 1;
+  }
+
+  throw new Error("Không thể tạo mã dự án theo thứ tự.");
+}
+
+async function tableExists(pool, tableName) {
+  const result = await pool
+    .request()
+    .input("table_name", sql.VarChar(128), tableName)
+    .query(
+      `SELECT CASE WHEN OBJECT_ID('dbo.' + @table_name, 'U') IS NOT NULL THEN 1 ELSE 0 END AS is_exists`,
+    );
+  return Number(result.recordset[0]?.is_exists || 0) === 1;
+}
+
+async function getDuAnColumns(pool) {
+  const result = await pool.request().query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'du_an'`,
+  );
+  return new Set(result.recordset.map((row) => String(row.COLUMN_NAME || "").trim().toLowerCase()));
+}
+
 function sha256Buffer(input) {
   return crypto.createHash("sha256").update(input).digest();
 }
@@ -588,26 +631,479 @@ app.get("/projects/personal", async (req, res) => {
 
     const ma_nhan_vien = String(decoded.sub);
     const pool = await poolPromise;
-    const result = await pool
-      .request()
-      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
-      .query(
-        `SELECT
-            da.ma_du_an,
-            da.ten_du_an,
-            COUNT(cv.ma_cong_viec) AS so_luong_cong_viec
+    const hasThanhVienNhom = await tableExists(pool, "thanh_vien_nhom");
+    const duAnCols = await getDuAnColumns(pool);
+    const hasTrangThaiDuAn = duAnCols.has("trang_thai_du_an");
+    const deletedFilter = hasTrangThaiDuAn
+      ? " AND (da.trang_thai_du_an IS NULL OR da.trang_thai_du_an <> N'Đã bị gỡ')"
+      : "";
+    const query = hasThanhVienNhom
+      ? `SELECT
+           da.ma_du_an,
+           da.ten_du_an,
+           da.ma_phong_ban,
+           COUNT(DISTINCT cv.ma_cong_viec) AS so_luong_cong_viec
+         FROM dbo.du_an da
+         LEFT JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+         LEFT JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         LEFT JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+         WHERE (pt.ma_nhan_vien = @ma_nhan_vien OR tvn.ma_nhan_vien = @ma_nhan_vien)${deletedFilter}
+         GROUP BY da.ma_du_an, da.ten_du_an, da.ma_phong_ban
+         ORDER BY da.ten_du_an ASC`
+      : `SELECT
+           da.ma_du_an,
+           da.ten_du_an,
+           da.ma_phong_ban,
+           COUNT(DISTINCT cv.ma_cong_viec) AS so_luong_cong_viec
          FROM dbo.phu_trach pt
          INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
          INNER JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
-         WHERE pt.ma_nhan_vien = @ma_nhan_vien
-         GROUP BY da.ma_du_an, da.ten_du_an
-         ORDER BY da.ten_du_an ASC`,
-      );
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien${deletedFilter}
+         GROUP BY da.ma_du_an, da.ten_du_an, da.ma_phong_ban
+         ORDER BY da.ten_du_an ASC`;
+
+    const result = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(query);
 
     return res.json({ projects: result.recordset });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Lỗi máy chủ khi lấy dự án cá nhân." });
+  }
+});
+
+// ── Soft-delete project (set trang_thai_du_an = 'Đã bị gỡ') ──
+app.patch("/projects/personal/:ma_du_an", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_du_an = String(req.params.ma_du_an || "").trim();
+    if (!ma_du_an) return res.status(400).json({ error: "Thiếu mã dự án." });
+
+    const pool = await poolPromise;
+    const duAnCols = await getDuAnColumns(pool);
+    if (!duAnCols.has("trang_thai_du_an")) {
+      return res.status(400).json({ error: "Bảng du_an chưa có cột trang_thai_du_an." });
+    }
+
+    const result = await pool.request()
+      .input("ma_du_an", sql.VarChar(25), ma_du_an)
+      .input("trang_thai_du_an", sql.NVarChar(50), "Đã bị gỡ")
+      .query(
+        `UPDATE dbo.du_an SET trang_thai_du_an = @trang_thai_du_an WHERE ma_du_an = @ma_du_an`
+      );
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Không tìm thấy dự án." });
+    }
+
+    return res.json({ message: "Xóa dự án thành công.", ma_du_an });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi xóa dự án." });
+  }
+});
+
+// ── List deleted projects ──
+app.get("/projects/personal/deleted", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+    const duAnCols = await getDuAnColumns(pool);
+    if (!duAnCols.has("trang_thai_du_an")) {
+      return res.json({ projects: [] });
+    }
+
+    const hasThanhVienNhom = await tableExists(pool, "thanh_vien_nhom");
+    const query = hasThanhVienNhom
+      ? `SELECT DISTINCT da.ma_du_an, da.ten_du_an, da.ma_phong_ban
+         FROM dbo.du_an da
+         LEFT JOIN dbo.phu_trach pt ON pt.ma_cong_viec IN (SELECT ma_cong_viec FROM dbo.cong_viec WHERE ma_du_an = da.ma_du_an)
+         LEFT JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+         WHERE da.trang_thai_du_an = N'Đã bị gỡ'
+           AND (pt.ma_nhan_vien = @ma_nhan_vien OR tvn.ma_nhan_vien = @ma_nhan_vien)
+         ORDER BY da.ten_du_an ASC`
+      : `SELECT DISTINCT da.ma_du_an, da.ten_du_an, da.ma_phong_ban
+         FROM dbo.du_an da
+         INNER JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE da.trang_thai_du_an = N'Đã bị gỡ'
+           AND pt.ma_nhan_vien = @ma_nhan_vien
+         ORDER BY da.ten_du_an ASC`;
+
+    const result = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(query);
+    return res.json({ projects: result.recordset });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dự án đã xóa." });
+  }
+});
+
+// ── Restore deleted project ──
+app.patch("/projects/personal/:ma_du_an/restore", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_du_an = String(req.params.ma_du_an || "").trim();
+    if (!ma_du_an) return res.status(400).json({ error: "Thiếu mã dự án." });
+
+    const pool = await poolPromise;
+    const duAnCols = await getDuAnColumns(pool);
+    if (!duAnCols.has("trang_thai_du_an")) {
+      return res.status(400).json({ error: "Bảng du_an chưa có cột trang_thai_du_an." });
+    }
+
+    const result = await pool.request()
+      .input("ma_du_an", sql.VarChar(25), ma_du_an)
+      .input("trang_thai_du_an", sql.NVarChar(50), "Đang thực hiện")
+      .query(
+        `UPDATE dbo.du_an SET trang_thai_du_an = @trang_thai_du_an WHERE ma_du_an = @ma_du_an AND trang_thai_du_an = N'Đã bị gỡ'`
+      );
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Không tìm thấy dự án hoặc dự án chưa bị xóa." });
+    }
+
+    return res.json({ message: "Khôi phục dự án thành công.", ma_du_an });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi khôi phục dự án." });
+  }
+});
+
+// ── Permanent delete project (set trang_thai_du_an = 'Đã bị xóa') ──
+app.patch("/projects/personal/:ma_du_an/permanent-delete", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_du_an = String(req.params.ma_du_an || "").trim();
+    if (!ma_du_an) return res.status(400).json({ error: "Thiếu mã dự án." });
+
+    const pool = await poolPromise;
+    const duAnCols = await getDuAnColumns(pool);
+    if (!duAnCols.has("trang_thai_du_an")) {
+      return res.status(400).json({ error: "Bảng du_an chưa có cột trang_thai_du_an." });
+    }
+
+    const result = await pool.request()
+      .input("ma_du_an", sql.VarChar(25), ma_du_an)
+      .input("trang_thai_du_an", sql.NVarChar(50), "Đã bị xóa")
+      .query(
+        `UPDATE dbo.du_an SET trang_thai_du_an = @trang_thai_du_an WHERE ma_du_an = @ma_du_an AND trang_thai_du_an = N'Đã bị gỡ'`
+      );
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Không tìm thấy dự án hoặc dự án chưa ở trạng thái đã bị gỡ." });
+    }
+
+    return res.json({ message: "Xóa vĩnh viễn dự án thành công.", ma_du_an });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi xóa vĩnh viễn dự án." });
+  }
+});
+
+app.get("/projects/personal/setup", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "Thiếu access token." });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
+
+    if (!decoded) {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
+
+    const pool = await poolPromise;
+    const membersResult = await pool.request().query(
+      `SELECT ma_nhan_vien, ten_nv, ma_phong_ban, trang_thai_hoat_dong
+       FROM dbo.nhan_vien
+       ORDER BY ten_nv ASC`,
+    );
+    let departments = [];
+    try {
+      const departmentsResult = await pool.request().query(
+        `SELECT ma_phong_ban, ten_phong_ban
+         FROM dbo.phong_ban
+         ORDER BY ten_phong_ban ASC`,
+      );
+      departments = departmentsResult.recordset || [];
+    } catch {
+      departments = [];
+    }
+
+    const members = membersResult.recordset
+      .map((row) => ({
+        ma_nhan_vien: row.ma_nhan_vien,
+        ten_nv: row.ten_nv,
+        ma_phong_ban: row.ma_phong_ban,
+        trang_thai_hoat_dong: row.trang_thai_hoat_dong || null,
+      }));
+
+    if (!departments.length) {
+      const departmentMap = new Map();
+      for (const member of members) {
+        const departmentId = String(member.ma_phong_ban || "").trim();
+        if (!departmentId) continue;
+        if (!departmentMap.has(departmentId)) {
+          departmentMap.set(departmentId, {
+            ma_phong_ban: departmentId,
+            ten_phong_ban: departmentId,
+          });
+        }
+      }
+      departments = Array.from(departmentMap.values()).sort((a, b) => a.ten_phong_ban.localeCompare(b.ten_phong_ban, "vi"));
+    }
+
+    return res.json({
+      departments,
+      members,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi tải dữ liệu tạo dự án." });
+  }
+});
+
+app.post("/projects/personal", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "Thiếu access token." });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
+
+    if (!decoded) {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
+
+    const ma_nhan_vien = String(decoded.sub);
+    const ten_du_an = String(req.body?.ten_du_an || "").trim();
+    const ma_phong_ban = String(req.body?.ma_phong_ban || "").trim();
+    const mo_ta = String(req.body?.mo_ta || "").trim();
+    const ngay_bat_dau_raw = req.body?.ngay_bat_dau;
+    const ngay_ket_thuc_raw = req.body?.ngay_ket_thuc;
+    const ngay_tao_du_an_raw = req.body?.ngay_tao_du_an;
+    const thiet_lap_trien_khai = Number.parseInt(String(req.body?.thiet_lap_trien_khai || "0"), 10);
+    const thiet_lap_den_han = Number.parseInt(String(req.body?.thiet_lap_den_han || "0"), 10);
+    const muc_do_uu_tien = String(req.body?.muc_do_uu_tien || "Trung bình").trim();
+    const memberIdsRaw = Array.isArray(req.body?.member_ids) ? req.body.member_ids : [];
+    const memberIds = Array.from(
+      new Set(
+        memberIdsRaw
+          .map((id) => String(id || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (!ten_du_an) {
+      return res.status(400).json({ error: "Vui lòng nhập tên dự án." });
+    }
+    if (!ma_phong_ban) {
+      return res.status(400).json({ error: "Vui lòng chọn phòng ban." });
+    }
+
+    const ngay_bat_dau = toIsoOrNull(ngay_bat_dau_raw);
+    const ngay_ket_thuc = toIsoOrNull(ngay_ket_thuc_raw);
+    const ngay_tao_du_an = toIsoOrNull(ngay_tao_du_an_raw) || new Date().toISOString();
+
+    if (!ngay_bat_dau || !ngay_ket_thuc) {
+      return res.status(400).json({ error: "Vui lòng chọn ngày bắt đầu và ngày kết thúc." });
+    }
+    if (new Date(ngay_ket_thuc).getTime() < new Date(ngay_bat_dau).getTime()) {
+      return res.status(400).json({ error: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu." });
+    }
+    if (!Number.isFinite(thiet_lap_trien_khai) || thiet_lap_trien_khai < 0) {
+      return res.status(400).json({ error: "Thiết lập thời gian sắp triển khai không hợp lệ." });
+    }
+    if (!Number.isFinite(thiet_lap_den_han) || thiet_lap_den_han < 0) {
+      return res.status(400).json({ error: "Thiết lập thời gian sắp đến hạn không hợp lệ." });
+    }
+
+    const pool = await poolPromise;
+    const departmentCheck = await pool.request().input("ma_phong_ban", sql.VarChar(25), ma_phong_ban).query(
+      `SELECT TOP 1 ma_phong_ban, ten_phong_ban
+       FROM dbo.phong_ban
+       WHERE ma_phong_ban = @ma_phong_ban`,
+    );
+    const department = departmentCheck.recordset[0];
+    if (!department) {
+      return res.status(400).json({ error: "Phòng ban không tồn tại." });
+    }
+
+    const validMembers = [];
+    for (const memberId of memberIds) {
+      const employeeResult = await pool
+        .request()
+        .input("ma_nhan_vien", sql.VarChar(25), memberId)
+        .input("ma_phong_ban", sql.VarChar(25), ma_phong_ban)
+        .query(
+          `SELECT TOP 1 ma_nhan_vien, ten_nv, ma_phong_ban, trang_thai_hoat_dong
+           FROM dbo.nhan_vien
+           WHERE ma_nhan_vien = @ma_nhan_vien AND ma_phong_ban = @ma_phong_ban`,
+        );
+      const employee = employeeResult.recordset[0];
+      if (employee && !isInactiveStatus(employee.trang_thai_hoat_dong)) {
+        validMembers.push(employee.ma_nhan_vien);
+      }
+    }
+    if (!validMembers.includes(ma_nhan_vien)) {
+      validMembers.push(ma_nhan_vien);
+    }
+
+    const duAnColumns = await getDuAnColumns(pool);
+    const hasNhomNhanVien = await tableExists(pool, "nhom_nhan_vien");
+    const hasNhom = !hasNhomNhanVien && (await tableExists(pool, "nhom"));
+    const hasThanhVienNhom = await tableExists(pool, "thanh_vien_nhom");
+    const hasGroupTables = (hasNhomNhanVien || hasNhom) && hasThanhVienNhom;
+
+    const ma_du_an = await generateProjectCode(pool);
+    const ma_nhom = hasGroupTables ? `NDA${ma_du_an.replace(/^DA/i, "")}` : null;
+    const now = new Date();
+
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      if (hasGroupTables && ma_nhom) {
+        const groupTable = hasNhomNhanVien ? "nhom_nhan_vien" : "nhom";
+        await new sql.Request(transaction)
+          .input("ma_nhom", sql.VarChar(25), ma_nhom)
+          .input("ten_nhom", sql.NVarChar(120), `Nhóm ${ten_du_an}`)
+          .input("thong_tin", sql.NVarChar(sql.MAX), mo_ta || null)
+          .input("nguoi_dung_nhom", sql.VarChar(25), ma_nhan_vien)
+          .input("ngay_tao_nhom", sql.DateTime, now)
+          .query(
+            `INSERT INTO dbo.${groupTable} (ma_nhom, ten_nhom, thong_tin, nguoi_dung_nhom, ngay_tao_nhom)
+             VALUES (@ma_nhom, @ten_nhom, @thong_tin, @nguoi_dung_nhom, @ngay_tao_nhom)`,
+          );
+
+        for (const memberId of validMembers) {
+          await new sql.Request(transaction)
+            .input("ma_nhom", sql.VarChar(25), ma_nhom)
+            .input("ma_nhan_vien", sql.VarChar(25), memberId)
+            .input("vai_tro", sql.NVarChar(50), memberId === ma_nhan_vien ? "Trưởng nhóm" : "Thành viên")
+            .query(
+              `IF NOT EXISTS (
+                 SELECT 1
+                 FROM dbo.thanh_vien_nhom
+                 WHERE ma_nhan_vien = @ma_nhan_vien AND ma_nhom = @ma_nhom
+               )
+               INSERT INTO dbo.thanh_vien_nhom (ma_nhan_vien, ma_nhom, vai_tro)
+               VALUES (@ma_nhan_vien, @ma_nhom, @vai_tro)`,
+            );
+        }
+      }
+
+      const request = new sql.Request(transaction)
+        .input("ma_du_an", sql.VarChar(25), ma_du_an)
+        .input("ma_phong_ban", sql.VarChar(25), ma_phong_ban)
+        .input("ten_du_an", sql.NVarChar(150), ten_du_an)
+        .input("mo_ta", sql.NVarChar(sql.MAX), mo_ta || null)
+        .input("ngay_bat_dau", sql.DateTime, new Date(ngay_bat_dau))
+        .input("ngay_ket_thuc", sql.DateTime, new Date(ngay_ket_thuc))
+        .input("ngay_tao_du_an", sql.DateTime, new Date(ngay_tao_du_an))
+        .input("muc_do_uu_tien", sql.NVarChar(30), muc_do_uu_tien)
+        .input("thiet_lap_trien_khai", sql.Int, thiet_lap_trien_khai)
+        .input("thiet_lap_den_han", sql.Int, thiet_lap_den_han);
+
+      const columns = ["ma_du_an", "ma_phong_ban", "ten_du_an", "mo_ta", "ngay_bat_dau", "ngay_ket_thuc", "ngay_tao_du_an"];
+      const values = ["@ma_du_an", "@ma_phong_ban", "@ten_du_an", "@mo_ta", "@ngay_bat_dau", "@ngay_ket_thuc", "@ngay_tao_du_an"];
+
+      if (hasGroupTables && ma_nhom && duAnColumns.has("ma_nhom")) {
+        request.input("ma_nhom", sql.VarChar(25), ma_nhom);
+        columns.push("ma_nhom");
+        values.push("@ma_nhom");
+      }
+      if (duAnColumns.has("muc_do_uu_tien")) {
+        columns.push("muc_do_uu_tien");
+        values.push("@muc_do_uu_tien");
+      } else if (duAnColumns.has("do_uu_tien")) {
+        columns.push("do_uu_tien");
+        values.push("@muc_do_uu_tien");
+      }
+      if (duAnColumns.has("thiet_lap_trien_khai")) {
+        columns.push("thiet_lap_trien_khai");
+        values.push("@thiet_lap_trien_khai");
+      }
+      if (duAnColumns.has("thiet_lap_ket_thuc")) {
+        columns.push("thiet_lap_ket_thuc");
+        values.push("@thiet_lap_den_han");
+      } else if (duAnColumns.has("thiet_lap_den_han")) {
+        columns.push("thiet_lap_den_han");
+        values.push("@thiet_lap_den_han");
+      }
+
+      // Nhiệm vụ 1: Auto-set trang_thai_du_an based on ngay_bat_dau vs ngay_tao_du_an
+      if (duAnColumns.has("trang_thai_du_an")) {
+        const startDate = new Date(ngay_bat_dau);
+        const creationDate = new Date(ngay_tao_du_an);
+        // Compare dates only (ignore time)
+        const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime();
+        const creationDay = new Date(creationDate.getFullYear(), creationDate.getMonth(), creationDate.getDate()).getTime();
+        let trang_thai_du_an;
+        if (startDay > creationDay) {
+          trang_thai_du_an = "Chưa bắt đầu";
+        } else {
+          trang_thai_du_an = "Đang thực hiện";
+        }
+        request.input("trang_thai_du_an", sql.NVarChar(50), trang_thai_du_an);
+        columns.push("trang_thai_du_an");
+        values.push("@trang_thai_du_an");
+      }
+
+      await request.query(
+        `INSERT INTO dbo.du_an (${columns.join(", ")})
+         VALUES (${values.join(", ")})`,
+      );
+
+      await transaction.commit();
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
+    }
+
+    return res.status(201).json({
+      project: {
+        ma_du_an,
+        ten_du_an,
+        ma_phong_ban,
+        ten_phong_ban: department.ten_phong_ban,
+        so_luong_cong_viec: 0,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi tạo dự án." });
   }
 });
 
@@ -645,13 +1141,10 @@ app.get("/tasks/personal", async (req, res) => {
           cv.do_uu_tien,
           ISNULL(ISNULL(cv.ngay_tao, cv.ngay_cap_nhat), GETDATE()) AS ngay_tao,
           cv.han_hoan_thanh,
-          pt.ma_nhan_vien AS ma_nhan_vien_phu_trach,
-          nv.ten_nv AS ten_nguoi_phu_trach,
           da.ma_du_an,
           da.ten_du_an
        FROM dbo.phu_trach pt
        INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
-       LEFT JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = pt.ma_nhan_vien
        LEFT JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
        WHERE pt.ma_nhan_vien = @ma_nhan_vien AND cv.ma_du_an = @ma_du_an
        ORDER BY
@@ -664,13 +1157,10 @@ app.get("/tasks/personal", async (req, res) => {
           cv.do_uu_tien,
           ISNULL(ISNULL(cv.ngay_tao, cv.ngay_cap_nhat), GETDATE()) AS ngay_tao,
           cv.han_hoan_thanh,
-          pt.ma_nhan_vien AS ma_nhan_vien_phu_trach,
-          nv.ten_nv AS ten_nguoi_phu_trach,
           da.ma_du_an,
           da.ten_du_an
        FROM dbo.phu_trach pt
        INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
-       LEFT JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = pt.ma_nhan_vien
        LEFT JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
        WHERE pt.ma_nhan_vien = @ma_nhan_vien
        ORDER BY
@@ -678,6 +1168,31 @@ app.get("/tasks/personal", async (req, res) => {
          cv.han_hoan_thanh ASC`;
 
     const result = await request.query(query);
+
+    // Collect unique task IDs
+    const uniqueTaskIds = [...new Set(result.recordset.map((row) => row.ma_cong_viec))];
+
+    // Fetch all assignees for these tasks
+    let assigneesMap = new Map();
+    if (uniqueTaskIds.length > 0) {
+      const assigneeQuery = await pool
+        .request()
+        .query(
+          `SELECT pt2.ma_cong_viec, pt2.ma_nhan_vien, nv2.ten_nv
+           FROM dbo.phu_trach pt2
+           INNER JOIN dbo.nhan_vien nv2 ON nv2.ma_nhan_vien = pt2.ma_nhan_vien
+           WHERE pt2.ma_cong_viec IN (${uniqueTaskIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})`,
+        );
+      for (const row of assigneeQuery.recordset) {
+        if (!assigneesMap.has(row.ma_cong_viec)) {
+          assigneesMap.set(row.ma_cong_viec, []);
+        }
+        assigneesMap.get(row.ma_cong_viec).push({
+          ma_nhan_vien: row.ma_nhan_vien,
+          ten_nv: row.ten_nv,
+        });
+      }
+    }
 
     const tasks = result.recordset
       .map((row) => ({
@@ -687,11 +1202,10 @@ app.get("/tasks/personal", async (req, res) => {
         do_uu_tien: row.do_uu_tien || null,
         ngay_tao: toIsoOrNull(row.ngay_tao) || new Date().toISOString(),
         han_hoan_thanh: toIsoOrNull(row.han_hoan_thanh),
-        ma_nhan_vien_phu_trach: row.ma_nhan_vien_phu_trach || null,
-        ten_nguoi_phu_trach: row.ten_nguoi_phu_trach || null,
         ma_du_an: row.ma_du_an || null,
         ten_du_an: row.ten_du_an || null,
         status_key: mapTaskStatusKey(row.trang_thai_cong_viec),
+        assignees: assigneesMap.get(row.ma_cong_viec) || [],
       }))
       .filter((task) => !isDeletedStatus(task.trang_thai_cong_viec));
 
@@ -1314,6 +1828,64 @@ app.post("/auth/logout", async (req, res) => {
   }
 });
 
+// Nhiệm vụ 3 & 4: API to get project members from thanh_vien_nhom
+app.get("/projects/personal/:ma_du_an/members", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "Thiếu access token." });
+    }
 
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
 
+    if (!decoded) {
+      return res.status(401).json({ error: "Access token không hợp lệ." });
+    }
+
+    const ma_du_an = String(req.params?.ma_du_an || "").trim();
+    if (!ma_du_an) {
+      return res.status(400).json({ error: "Thiếu mã dự án." });
+    }
+
+    const pool = await poolPromise;
+    const hasThanhVienNhom = await tableExists(pool, "thanh_vien_nhom");
+
+    if (!hasThanhVienNhom) {
+      return res.json({ members: [] });
+    }
+
+    const result = await pool
+      .request()
+      .input("ma_du_an", sql.VarChar(25), ma_du_an)
+      .query(
+        `SELECT DISTINCT
+            nv.ma_nhan_vien,
+            nv.ten_nv,
+            nv.ma_phong_ban,
+            tvn.vai_tro
+         FROM dbo.du_an da
+         INNER JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+         INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = tvn.ma_nhan_vien
+         WHERE da.ma_du_an = @ma_du_an
+         ORDER BY nv.ten_nv ASC`,
+      );
+
+    const members = result.recordset.map((row) => ({
+      ma_nhan_vien: row.ma_nhan_vien,
+      ten_nv: row.ten_nv,
+      ma_phong_ban: row.ma_phong_ban,
+      vai_tro: row.vai_tro || null,
+    }));
+
+    return res.json({ members });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy thành viên dự án." });
+  }
+});
 

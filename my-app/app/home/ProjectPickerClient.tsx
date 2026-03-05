@@ -69,6 +69,7 @@ export default function ProjectPickerClient({
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [form, setForm] = useState<ProjectForm>(DEFAULT_FORM);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
 
   const filteredMembers = useMemo(() => {
     if (!form.ma_phong_ban) return [];
@@ -91,6 +92,27 @@ export default function ProjectPickerClient({
     }
     return Array.from(map.values()).sort((a, b) => a.ten_phong_ban.localeCompare(b.ten_phong_ban, "vi"));
   }, [departments, members]);
+
+  // Departments that have at least one project (for the sidebar menu)
+  const displayDepts = useMemo(() => {
+    const deptIds = new Set(projects.map(p => (p.ma_phong_ban || "").trim()).filter(Boolean));
+    // Use effectiveDepartments names if available, else fall back to IDs from projects
+    const fromDepts = effectiveDepartments.filter(d => deptIds.has(d.ma_phong_ban));
+    if (fromDepts.length > 0) return fromDepts;
+    // Derive directly from projects
+    const map = new Map<string, Department>();
+    for (const p of projects) {
+      const id = (p.ma_phong_ban || "").trim();
+      if (!id) continue;
+      if (!map.has(id)) map.set(id, { ma_phong_ban: id, ten_phong_ban: id });
+    }
+    return Array.from(map.values()).sort((a, b) => a.ten_phong_ban.localeCompare(b.ten_phong_ban, "vi"));
+  }, [effectiveDepartments, projects]);
+
+  const displayedProjects = useMemo(() => {
+    if (!selectedDeptId) return projects;
+    return projects.filter(p => (p.ma_phong_ban || "").trim() === selectedDeptId);
+  }, [projects, selectedDeptId]);
 
   async function fetchSetupData() {
     const setupEndpoints = ["/api/tasks/personal/setup", "/api/projects/personal/setup", "/api/projects/personal?setup=1"];
@@ -217,52 +239,106 @@ export default function ProjectPickerClient({
     <>
       {error ? <p className="pm-profile-error">{error}</p> : null}
 
-      <div className="pm-project-grid">
-        {projects.map((project) => (
-          <Link
-            key={project.ma_du_an}
-            href={`/home?view=personal-tasks&project=${encodeURIComponent(project.ma_du_an)}`}
-            className="pm-project-card"
-          >
-            <div className="pm-project-card-head">
-              <h3>{project.ten_du_an}</h3>
-              <span className="pm-project-count">{project.so_luong_cong_viec}</span>
+      <div className="pm-dept-layout">
+        {/* Department sidebar */}
+        {displayDepts.length > 0 && (
+          <aside className="pm-dept-sidebar">
+            <div className="pm-dept-sidebar-title">Phòng ban</div>
+            <button
+              type="button"
+              className={`pm-dept-menu-item${selectedDeptId === null ? " active" : ""}`}
+              onClick={() => setSelectedDeptId(null)}
+            >
+              <span className="pm-dept-menu-name">Tất cả</span>
+              <span className="pm-dept-menu-count">{projects.length}</span>
+            </button>
+            {displayDepts.map((dept) => {
+              const count = projects.filter(p => (p.ma_phong_ban || "").trim() === dept.ma_phong_ban).length;
+              return (
+                <button
+                  key={dept.ma_phong_ban}
+                  type="button"
+                  className={`pm-dept-menu-item${selectedDeptId === dept.ma_phong_ban ? " active" : ""}`}
+                  onClick={() => setSelectedDeptId(dept.ma_phong_ban)}
+                >
+                  <span className="pm-dept-menu-name">{dept.ten_phong_ban}</span>
+                  <span className="pm-dept-menu-count">{count}</span>
+                </button>
+              );
+            })}
+          </aside>
+        )}
+
+        {/* Project grid */}
+        <div className="pm-dept-content">
+          {selectedDeptId !== null && (
+            <div className="pm-dept-content-header">
+              <h3 className="pm-dept-content-title">
+                {displayDepts.find(d => d.ma_phong_ban === selectedDeptId)?.ten_phong_ban || selectedDeptId}
+              </h3>
+              <span className="pm-dept-content-count">{displayedProjects.length} dự án</span>
             </div>
-            <dl className="pm-project-info">
-              <div>
-                <dt>Mã dự án</dt>
-                <dd>{project.ma_du_an}</dd>
-              </div>
-              <div>
-                <dt>Công việc</dt>
-                <dd>{project.so_luong_cong_viec} mục</dd>
-              </div>
-            </dl>
-            <div className="pm-project-card-footer">
-              <div className="pm-project-card-cta">Vào công việc dự án</div>
-              <button
-                className="pm-project-delete-btn"
-                type="button"
-                title="Xóa dự án"
-                disabled={deletingProjectId === project.ma_du_an}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void deleteProject(project.ma_du_an, project.ten_du_an);
-                }}
+          )}
+          <div className="pm-project-grid">
+            {displayedProjects.map((project) => (
+              <Link
+                key={project.ma_du_an}
+                href={`/home?view=personal-tasks&project=${encodeURIComponent(project.ma_du_an)}`}
+                className="pm-project-card"
               >
-                <Image src="/icon/bin.png" alt="Xóa" width={14} height={14} />
-              </button>
-            </div>
-          </Link>
-        ))}
+                <div className="pm-project-card-head">
+                  <h3>{project.ten_du_an}</h3>
+                  <span className="pm-project-count">{project.so_luong_cong_viec}</span>
+                </div>
+                <dl className="pm-project-info">
+                  <div>
+                    <dt>Mã dự án</dt>
+                    <dd>{project.ma_du_an}</dd>
+                  </div>
+                  <div>
+                    <dt>Công việc</dt>
+                    <dd>{project.so_luong_cong_viec} mục</dd>
+                  </div>
+                  {project.ma_phong_ban && (
+                    <div>
+                      <dt>Phòng ban</dt>
+                      <dd>
+                        {displayDepts.find(d => d.ma_phong_ban === project.ma_phong_ban)?.ten_phong_ban || project.ma_phong_ban}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                <div className="pm-project-card-footer">
+                  <div className="pm-project-card-cta">Vào công việc dự án</div>
+                  <button
+                    className="pm-project-delete-btn"
+                    type="button"
+                    title="Xóa dự án"
+                    disabled={deletingProjectId === project.ma_du_an}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void deleteProject(project.ma_du_an, project.ten_du_an);
+                    }}
+                  >
+                    <Image src="/icon/bin.png" alt="Xóa" width={14} height={14} />
+                  </button>
+                </div>
+              </Link>
+            ))}
 
-        <button className="pm-project-add-card" type="button" onClick={() => void openCreateModal()}>
-          <span className="pm-project-add-icon">+</span>
-          <span className="pm-project-add-text">Thêm dự án</span>
-        </button>
+            <button className="pm-project-add-card" type="button" onClick={() => void openCreateModal()}>
+              <span className="pm-project-add-icon">+</span>
+              <span className="pm-project-add-text">Thêm dự án</span>
+            </button>
 
-        {projects.length === 0 ? <div className="pm-project-empty">Bạn chưa tham gia dự án nào.</div> : null}
+            {displayedProjects.length === 0 && projects.length > 0 ? (
+              <div className="pm-project-empty">Không có dự án trong phòng ban này.</div>
+            ) : projects.length === 0 ? (
+              <div className="pm-project-empty">Bạn chưa tham gia dự án nào.</div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       {openCreate ? (

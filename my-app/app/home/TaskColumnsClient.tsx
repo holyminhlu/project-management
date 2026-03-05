@@ -1,7 +1,8 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 type TaskStatusKey = "todo" | "in_progress" | "done";
 
@@ -133,19 +134,166 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [form, setForm] = useState<CreateFormState>(DEFAULT_FORM);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
-  const sortedTasks = useMemo(() => {
-    return tasks.slice().sort((a, b) => {
+  function exportToPDF() {
+    const now = new Intl.DateTimeFormat("vi-VN", {
+      hour: "2-digit", minute: "2-digit",
+      day: "2-digit", month: "2-digit", year: "numeric",
+    }).format(new Date());
+
+    const allTasks = tasks;
+    const todoList = allTasks.filter((t) => t.status_key === "todo");
+    const inProgressList = allTasks.filter((t) => t.status_key === "in_progress");
+    const doneList = allTasks.filter((t) => t.status_key === "done");
+
+    function taskRows(taskList: PersonalTask[]) {
+      if (taskList.length === 0) {
+        return `<tr><td colspan="5" style="text-align:center;color:#888;padding:12px;">Chưa có công việc</td></tr>`;
+      }
+      return taskList
+        .map(
+          (t, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${t.tieu_de}</td>
+            <td>${formatDueDate(t.han_hoan_thanh)}</td>
+            <td>${t.do_uu_tien || "—"}</td>
+            <td>${(t.assignees || []).map((a) => a.ten_nv).join(", ") || "—"}</td>
+          </tr>`,
+        )
+        .join("");
+    }
+
+    const memberRows =
+      projectMembers.length === 0
+        ? `<tr><td colspan="2" style="text-align:center;color:#888;padding:12px;">Chưa có thành viên</td></tr>`
+        : projectMembers
+            .map(
+              (m, i) =>
+                `<tr><td>${i + 1}</td><td>${m.ten_nv}</td><td>${m.ma_nhan_vien}</td></tr>`,
+            )
+            .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Báo cáo dự án - ${selectedProjectName}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #1a1f2e; padding: 32px; font-size: 13px; line-height: 1.5; }
+    .report-header { border-bottom: 2px solid #4f8ef7; padding-bottom: 16px; margin-bottom: 24px; }
+    .report-header h1 { font-size: 22px; font-weight: 700; color: #1a1f2e; margin-bottom: 4px; }
+    .report-meta { color: #666; font-size: 12px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px; }
+    .stat-box { border: 1px solid #e5e8f0; border-radius: 8px; padding: 12px; text-align: center; background: #f9fafb; }
+    .stat-box .num { font-size: 22px; font-weight: 800; color: #1a1f2e; }
+    .stat-box .lbl { font-size: 11px; color: #666; margin-top: 2px; }
+    .section { margin-bottom: 28px; }
+    .section-title { font-size: 14px; font-weight: 700; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; }
+    .section-title.members { background: #eef2ff; color: #3730a3; border-left: 4px solid #4f46e5; }
+    .section-title.todo    { background: #f5f7fa; color: #475569; border-left: 4px solid #94a3b8; }
+    .section-title.inprogress { background: #eef2ff; color: #3730a3; border-left: 4px solid #4f46e5; }
+    .section-title.done   { background: #ecfdf5; color: #065f46; border-left: 4px solid #059669; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f4f6fb; padding: 8px 10px; text-align: left; font-size: 12px; border: 1px solid #dde3ef; font-weight: 700; }
+    td { padding: 7px 10px; border: 1px solid #e5e8f0; font-size: 12px; vertical-align: top; }
+    tbody tr:nth-child(even) { background: #f9fafb; }
+    .footer { margin-top: 32px; border-top: 1px solid #e5e8f0; padding-top: 12px; font-size: 11px; color: #999; text-align: right; }
+    @media print {
+      body { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-header">
+    <h1>Báo cáo dự án: ${selectedProjectName}</h1>
+    <div class="report-meta">Mã dự án: ${selectedProjectId} &nbsp;|&nbsp; Ngày xuất: ${now}</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-box"><div class="num">${allTasks.length}</div><div class="lbl">Tổng công việc</div></div>
+    <div class="stat-box"><div class="num">${todoList.length}</div><div class="lbl">Cần thực hiện</div></div>
+    <div class="stat-box"><div class="num">${inProgressList.length}</div><div class="lbl">Đang thực hiện</div></div>
+    <div class="stat-box"><div class="num">${doneList.length}</div><div class="lbl">Đã hoàn thành</div></div>
+    <div class="stat-box"><div class="num">${projectMembers.length}</div><div class="lbl">Thành viên</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title members">Thành viên dự án (${projectMembers.length})</div>
+    <table>
+      <thead><tr><th>#</th><th>Tên nhân viên</th><th>Mã nhân viên</th></tr></thead>
+      <tbody>${memberRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title todo">Cần thực hiện (${todoList.length})</div>
+    <table>
+      <thead><tr><th>#</th><th>Tiêu đề công việc</th><th>Hạn hoàn thành</th><th>Độ ưu tiên</th><th>Người phụ trách</th></tr></thead>
+      <tbody>${taskRows(todoList)}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title inprogress">Đang thực hiện (${inProgressList.length})</div>
+    <table>
+      <thead><tr><th>#</th><th>Tiêu đề công việc</th><th>Hạn hoàn thành</th><th>Độ ưu tiên</th><th>Người phụ trách</th></tr></thead>
+      <tbody>${taskRows(inProgressList)}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title done">Đã hoàn thành (${doneList.length})</div>
+    <table>
+      <thead><tr><th>#</th><th>Tiêu đề công việc</th><th>Hạn hoàn thành</th><th>Độ ưu tiên</th><th>Người phụ trách</th></tr></thead>
+      <tbody>${taskRows(doneList)}</tbody>
+    </table>
+  </div>
+
+  <div class="footer">Được tạo bởi hệ thống quản lý dự án &mdash; ${now}</div>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "width=960,height=720");
+    if (!win) {
+      alert("Trình duyệt đã chặn cửa sổ bật lên. Vui lòng cho phép pop-up để xuất PDF.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => {
+      win.print();
+    };
+  }
+
+  const filteredTasks = useMemo(() => {
+    let result = tasks.slice();
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(t => t.tieu_de.toLowerCase().includes(q));
+    }
+
+    // Sort logic
+    result.sort((a, b) => {
       if (!isSortEnabled) return 0;
       const aTime = a.han_hoan_thanh ? new Date(a.han_hoan_thanh).getTime() : Number.MAX_SAFE_INTEGER;
       const bTime = b.han_hoan_thanh ? new Date(b.han_hoan_thanh).getTime() : Number.MAX_SAFE_INTEGER;
       return aTime - bTime;
     });
-  }, [tasks, isSortEnabled]);
 
-  const todoTasks = sortedTasks.filter((task) => task.status_key === "todo");
-  const inProgressTasks = sortedTasks.filter((task) => task.status_key === "in_progress");
-  const doneTasks = sortedTasks.filter((task) => task.status_key === "done");
+    return result;
+  }, [tasks, searchQuery, isSortEnabled]);
+
+  const todoTasks = filteredTasks.filter((task) => task.status_key === "todo" && (statusFilter === "all" || statusFilter === "todo"));
+  const inProgressTasks = filteredTasks.filter((task) => task.status_key === "in_progress" && (statusFilter === "all" || statusFilter === "in_progress"));
+  const doneTasks = filteredTasks.filter((task) => task.status_key === "done" && (statusFilter === "all" || statusFilter === "done"));
 
   async function createTask(status: TaskStatusKey) {
     const tieu_de = form.tieu_de.trim();
@@ -599,22 +747,287 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
     );
   }
 
+  function renderListView() {
+    const groups: Array<{ key: TaskStatusKey; label: string; tasks: PersonalTask[] }> = [
+      { key: "todo", label: "Cần thực hiện", tasks: todoTasks },
+      { key: "in_progress", label: "Đang thực hiện", tasks: inProgressTasks },
+      { key: "done", label: "Đã hoàn thành", tasks: doneTasks },
+    ];
+
+    return (
+      <div className="pm-task-list-view">
+        {groups.map(({ key, label, tasks: groupTasks }) => {
+          if (statusFilter !== "all" && statusFilter !== key) return null;
+          return (
+            <div key={key} className="pm-list-group">
+              <div className={`pm-list-group-header pm-list-group-header-${key}`}>
+                <span className="pm-list-group-title">{label}</span>
+                <span className="pm-list-group-count">{groupTasks.length}</span>
+              </div>
+              {groupTasks.length === 0 ? (
+                <div className="pm-list-group-empty">Chưa có công việc.</div>
+              ) : (
+                <table className="pm-task-list-table">
+                  <thead>
+                    <tr>
+                      <th>Tiêu đề công việc</th>
+                      <th>Hạn hoàn thành</th>
+                      <th>Ưu tiên</th>
+                      <th>Người phụ trách</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupTasks.map((task) => {
+                      const assignees = task.assignees || [];
+                      const deadlineState = getDeadlineState(task);
+                      const isDetail = detailTaskId === task.ma_cong_viec;
+                      const isAssignee = assigneeTaskId === task.ma_cong_viec;
+                      const colors = ["#4f8ef7", "#20b486", "#f08a4b", "#8b78f7", "#ef5f8f"];
+
+                      return (
+                        <Fragment key={task.ma_cong_viec}>
+                          <tr className={`pm-list-row${isDetail || isAssignee ? " pm-list-row-active" : ""}`}>
+                            <td className="td-title">{task.tieu_de}</td>
+                            <td
+                              className={`td-due${
+                                deadlineState === "overdue"
+                                  ? " td-overdue"
+                                  : deadlineState === "due_soon"
+                                    ? " td-due-soon"
+                                    : ""
+                              }`}
+                            >
+                              {formatDueDate(task.han_hoan_thanh)}
+                            </td>
+                            <td>
+                              <span
+                                className={`pm-list-priority pm-list-priority-${
+                                  (task.do_uu_tien || "").toLowerCase().replace(/\s+/g, "-")
+                                }`}
+                              >
+                                {task.do_uu_tien || "—"}
+                              </span>
+                            </td>
+                            <td className="td-assignees">
+                              <div className="pm-task-assignees-row" style={{ marginTop: 0 }}>
+                                {assignees.length === 0 ? (
+                                  <span className="pm-task-assignee-none">—</span>
+                                ) : (
+                                  <>
+                                    {assignees.slice(0, 4).map((a, idx) => (
+                                      <span
+                                        key={a.ma_nhan_vien}
+                                        className="pm-task-assignee-dot"
+                                        style={{ backgroundColor: colors[idx % colors.length] }}
+                                        title={a.ten_nv}
+                                      >
+                                        {toInitials(a.ten_nv)}
+                                      </span>
+                                    ))}
+                                    {assignees.length > 4 && (
+                                      <span className="pm-task-assignee-dot pm-task-avatar-extra">
+                                        +{assignees.length - 4}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td className="td-actions">
+                              <div className="pm-list-actions">
+                                <button
+                                  className={`pm-list-action-btn pm-list-action-info${isDetail ? " active" : ""}`}
+                                  type="button"
+                                  title="Thông tin công việc"
+                                  onClick={() => {
+                                    setDetailTaskId((prev) =>
+                                      prev === task.ma_cong_viec ? null : task.ma_cong_viec,
+                                    );
+                                    setAssigneeTaskId(null);
+                                  }}
+                                >
+                                  <Image src="/icon/more.png" alt="Info" width={14} height={14} />
+                                  <span>Thông tin</span>
+                                </button>
+                                <button
+                                  className={`pm-list-action-btn pm-list-action-assign${isAssignee ? " active" : ""}`}
+                                  type="button"
+                                  title="Thêm thành viên"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setError("");
+                                    setAssigneeTaskId((prev) =>
+                                      prev === task.ma_cong_viec ? null : task.ma_cong_viec,
+                                    );
+                                    setDetailTaskId(null);
+                                  }}
+                                >
+                                  <Image src="/icon/addfriends.png" alt="Thêm thành viên" width={14} height={14} />
+                                  <span>Thành viên</span>
+                                </button>
+                                <div className="pm-list-actions-divider" />
+                                <button
+                                  className="pm-list-delete-btn"
+                                  type="button"
+                                  title="Xóa công việc"
+                                  disabled={deletingTaskId === task.ma_cong_viec}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void deleteTask(task.ma_cong_viec);
+                                  }}
+                                >
+                                  <Image src="/icon/bin.png" alt="Delete" width={14} height={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {isDetail && (
+                            <tr className="pm-list-detail-row">
+                              <td colSpan={5}>
+                                <div className="pm-list-detail-panel">
+                                  <div className="pm-list-detail-card">
+                                    <div className="pm-list-detail-item">
+                                      <span className="pm-list-detail-label">Mã công việc</span>
+                                      <span className="pm-list-detail-value">{task.ma_cong_viec}</span>
+                                    </div>
+                                    <div className="pm-list-detail-item">
+                                      <span className="pm-list-detail-label">Dự án</span>
+                                      <span className="pm-list-detail-value">{task.ten_du_an || selectedProjectName}</span>
+                                    </div>
+                                    <div className="pm-list-detail-item">
+                                      <span className="pm-list-detail-label">Ngày tạo</span>
+                                      <span className="pm-list-detail-value">{formatCreatedAt(task.ngay_tao)}</span>
+                                    </div>
+                                    <div className="pm-list-detail-item">
+                                      <span className="pm-list-detail-label">Trạng thái</span>
+                                      <span className={`status-badge status-badge-${task.status_key}`}>
+                                        {statusToLabel(task.status_key)}
+                                      </span>
+                                    </div>
+                                    <div className="pm-list-detail-item">
+                                      <span className="pm-list-detail-label">Độ ưu tiên</span>
+                                      <span className="pm-list-detail-value">{task.do_uu_tien || "Chưa đặt"}</span>
+                                    </div>
+                                    {assignees.length > 0 && (
+                                      <div className="pm-list-detail-item pm-list-detail-item-wide">
+                                        <span className="pm-list-detail-label">Người phụ trách</span>
+                                        <span className="pm-list-detail-value">
+                                          {assignees.map((a) => a.ten_nv).join(", ")}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+
+                          {isAssignee && (
+                            <tr className="pm-list-assignee-row">
+                              <td colSpan={5}>{renderAssigneePanel(task)}</td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <>
       {error ? <p className="pm-profile-error">{error}</p> : null}
       {moving ? <p className="pm-task-moving-note">Đang cập nhật trạng thái công việc...</p> : null}
 
-      <div className="pm-task-board">
-        {renderColumn("todo", "Cần thực hiện", todoTasks)}
-        {renderColumn("in_progress", "Đang thực hiện", inProgressTasks)}
-        {renderColumn("done", "Đã hoàn thành", doneTasks)}
-
-        <section className="pm-task-column pm-task-column-add">
-          <button className="pm-task-add-btn" type="button">
-            + Thêm nhóm công việc
-          </button>
-        </section>
+      <div className="pm-task-tools">
+        <label className="pm-tool-search-wrap">
+          <Image className="pm-tool-icon-image" src="/icon/search.png" alt="Search" width={14} height={14} />
+          <input
+            className="pm-tool-search"
+            type="text"
+            placeholder="Tìm kiếm..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </label>
+        <button className="pm-tool-icon-btn" type="button" aria-label="Bộ lọc">
+          <Image className="pm-tool-icon-image" src="/icon/filter.png" alt="Filter" width={14} height={14} />
+        </button>
+        <div className="pm-tool-select-wrap">
+          <select
+            className="pm-tool-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">Bộ lọc trạng thái công việc</option>
+            <option value="todo">Cần thực hiện</option>
+            <option value="in_progress">Đang thực hiện</option>
+            <option value="done">Đã hoàn thành</option>
+          </select>
+        </div>
+        <button className="pm-tool-btn" type="button" onClick={() => { setSearchQuery(""); setStatusFilter("all"); }}>
+          <Image className="pm-tool-icon-image" src="/icon/nofilter.svg" alt="No Filter" width={14} height={14} />
+          Không lọc
+        </button>
+        <Link
+          className="pm-tool-btn"
+          href={
+            isSortEnabled
+              ? `/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}`
+              : `/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}&sort=due_asc`
+          }
+        >
+          <Image className="pm-tool-icon-image" src="/icon/sort.svg" alt="Sort" width={14} height={14} />
+          {isSortEnabled ? "Sắp xếp" : "Không sắp xếp"}
+        </Link>
+        <div className="pm-tool-select-wrap">
+          <select
+            className="pm-tool-select"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value as "board" | "list")}
+          >
+            <option value="board">Hiển thị dạng cột</option>
+            <option value="list">Hiển thị dạng danh sách</option>
+          </select>
+        </div>
+        <button className="pm-tool-btn" type="button" onClick={exportToPDF}>
+          <Image className="pm-tool-icon-image" src="/icon/export.png" alt="Export" width={14} height={14} />
+          Xuất khẩu
+        </button>
+        <button className="pm-tool-btn" type="button">
+          <Image className="pm-tool-icon-image" src="/icon/chart.png" alt="Analyze" width={14} height={14} />
+          Phân tích công việc
+        </button>
+        <Link
+          className="pm-tool-refresh"
+          href={`/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}`}
+        >
+          <Image className="pm-tool-icon-image" src="/icon/refresh.png" alt="Refresh" width={14} height={14} />
+          Làm mới
+        </Link>
       </div>
+      {viewMode === "board" ? (
+        <div className="pm-task-board">
+          {renderColumn("todo", "Cần thực hiện", todoTasks)}
+          {renderColumn("in_progress", "Đang thực hiện", inProgressTasks)}
+          {renderColumn("done", "Đã hoàn thành", doneTasks)}
+          <section className="pm-task-column pm-task-column-add">
+            <button className="pm-task-add-btn" type="button">
+              + Thêm nhóm công việc
+            </button>
+          </section>
+        </div>
+      ) : (
+        renderListView()
+      )}
     </>
   );
 }

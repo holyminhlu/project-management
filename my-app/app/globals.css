@@ -195,6 +195,152 @@ body {
   flex-shrink: 0;
 }
 
+/* ── Report sub-section label inside nav-group ─────────────────── */
+.nav-report-section {
+  padding: 10px 12px 3px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.28);
+  text-transform: uppercase;
+}
+
+/* ── Reports main content area ──────────────────────────────────── */
+.pm-reports {
+  padding: 28px 32px;
+  max-width: 900px;
+}
+
+/* Overview landing (no report selected) */
+.pm-report-overview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 0 24px;
+}
+
+.pm-report-overview-icon {
+  font-size: 52px;
+  margin-bottom: 14px;
+}
+
+.pm-report-overview-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.pm-report-overview-desc {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: 0 0 32px;
+  max-width: 480px;
+}
+
+.pm-report-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  width: 100%;
+  max-width: 680px;
+}
+
+.pm-report-overview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.pm-report-overview-card:hover {
+  box-shadow: 0 4px 16px rgba(79, 142, 247, 0.13);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.pm-report-overview-card-icon {
+  font-size: 26px;
+}
+
+.pm-report-overview-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Individual report view */
+.pm-report-view {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.pm-report-view-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.pm-report-view-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.pm-report-view-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.pm-report-view-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.pm-report-view-body {
+  padding: 40px 28px;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-report-wip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.pm-report-wip-icon {
+  font-size: 40px;
+}
+
+.pm-report-wip-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .sidebar-trash {
   padding: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
@@ -1091,6 +1237,113 @@ tbody td:first-child {
   text-align: center;
 }
 
+/* ── Department sidebar layout ── */
+.pm-dept-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.pm-dept-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  position: sticky;
+  top: 0;
+}
+
+.pm-dept-sidebar-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.pm-dept-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  margin-bottom: 2px;
+}
+
+.pm-dept-menu-item:hover {
+  background: var(--row-hover);
+  color: var(--accent);
+}
+
+.pm-dept-menu-item.active {
+  background: rgba(79, 142, 247, 0.1);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.pm-dept-menu-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-dept-menu-count {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pm-dept-menu-item.active .pm-dept-menu-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.pm-dept-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-dept-content-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pm-dept-content-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.pm-dept-content-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+
 .pm-project-add-card {
   border: 1px dashed #b8c6e4;
   border-radius: 12px;
@@ -1839,8 +2092,8 @@ tbody td:first-child {
   transform: scale(1.12);
 }
 
-/* ── Delete button ── */
-.pm-task-delete-btn {
+/* ── Delete button (board card — absolute positioned over card) ── */
+.pm-task-card .pm-task-delete-btn {
   position: absolute;
   right: 8px;
   top: 8px;
@@ -1857,7 +2110,7 @@ tbody td:first-child {
   z-index: 3;
 }
 
-.pm-task-delete-btn:hover {
+.pm-task-card .pm-task-delete-btn:hover {
   background: #ffe6e8;
 }
 
@@ -2219,4 +2472,417 @@ tbody td:first-child {
   .pm-project-modal {
     max-height: calc(100vh - 20px);
   }
+}
+
+
+
+/* --- List View --- */
+.pm-task-list-view {
+  margin-top: 10px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.pm-task-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.pm-task-list-table th {
+  padding: 10px 16px;
+  background: #f0f4fb;
+  border-bottom: 1px solid var(--border);
+  color: #67748e;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pm-task-list-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f4f9;
+  font-size: 13.5px;
+  color: #344767;
+  vertical-align: middle;
+}
+
+.pm-task-list-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pm-task-list-table tr:hover td {
+  background-color: #fafdff;
+}
+
+.td-title {
+  font-weight: 800;
+  color: #1a2547;
+  font-size: 13.5px;
+}
+
+.td-empty {
+  text-align: center;
+  padding: 40px !important;
+  color: #a0aec0;
+  font-style: italic;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-badge-todo {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.status-badge-in_progress {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.status-badge-done {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.td-due {
+  color: #67748e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Delete button (base — used in list view & anywhere outside card) ── */
+.pm-task-delete-btn {
+  position: static;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #f1ccd0;
+  background: #fff5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.12s;
+}
+
+.pm-task-delete-btn:hover {
+  background: #ffe0e3;
+  border-color: #e8a2a9;
+}
+
+/* ── Delete button — list view only ── */
+.pm-list-delete-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #f1ccd0;
+  background: #fff5f5;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.pm-list-delete-btn:hover {
+  background: #ffe0e3;
+  border-color: #e8a2a9;
+}
+
+.pm-list-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pm-task-assignee-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  margin-left: -8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.pm-task-assignee-dot:first-child {
+  margin-left: 0;
+}
+
+/* ═══════════════════════════════════════════
+   LIST VIEW — GROUPED SECTIONS
+═══════════════════════════════════════════ */
+
+.pm-list-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.pm-list-group:last-child {
+  border-bottom: none;
+}
+
+.pm-list-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pm-list-group-header-todo {
+  background: #f5f7fa;
+  border-left: 4px solid #94a3b8;
+}
+
+.pm-list-group-header-in_progress {
+  background: #eef2ff;
+  border-left: 4px solid #4f46e5;
+}
+
+.pm-list-group-header-done {
+  background: #ecfdf5;
+  border-left: 4px solid #059669;
+}
+
+.pm-list-group-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #1e2d4a;
+  letter-spacing: 0.01em;
+}
+
+.pm-list-group-header-todo .pm-list-group-title {
+  color: #475569;
+}
+
+.pm-list-group-header-in_progress .pm-list-group-title {
+  color: #3730a3;
+}
+
+.pm-list-group-header-done .pm-list-group-title {
+  color: #065f46;
+}
+
+.pm-list-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pm-list-group-header-todo .pm-list-group-count {
+  background: #dde3ed;
+  color: #475569;
+}
+
+.pm-list-group-header-in_progress .pm-list-group-count {
+  background: #c7d2fe;
+  color: #3730a3;
+}
+
+.pm-list-group-header-done .pm-list-group-count {
+  background: #a7f3d0;
+  color: #065f46;
+}
+
+.pm-list-group-empty {
+  padding: 16px 20px;
+  font-size: 13px;
+  color: #a0aec0;
+  font-style: italic;
+}
+
+/* ─ Row states ─ */
+
+.pm-list-row-active td {
+  background: #f8fbff !important;
+}
+
+/* ─ Action buttons ─ */
+
+.pm-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pm-list-actions-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.pm-list-action-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  font-family: inherit;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.pm-list-action-btn:hover {
+  background: #eef3ff;
+  border-color: #c4d4f0;
+}
+
+.pm-list-action-btn.active {
+  background: #eef3ff;
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+
+.pm-list-action-info {
+  border-color: #d8e2f5;
+  color: #3054a0;
+}
+
+.pm-list-action-info:hover,
+.pm-list-action-info.active {
+  background: #edf3ff;
+  border-color: #4f72c4;
+  color: #2a4ea0;
+}
+
+.pm-list-action-assign {
+  border-color: #bee6d6;
+  color: #0f7f57;
+}
+
+.pm-list-action-assign:hover,
+.pm-list-action-assign.active {
+  background: #e8faf3;
+  border-color: #20b486;
+  color: #0f7f57;
+}
+
+/* ─ Priority badge ─ */
+
+.pm-list-priority {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pm-list-priority-thấp {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.pm-list-priority-trung-bình {
+  background: #fef9ec;
+  color: #b45309;
+}
+
+.pm-list-priority-cao {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+/* ─ Due date states ─ */
+
+.td-overdue {
+  color: #e11d48 !important;
+  font-weight: 600;
+}
+
+.td-due-soon {
+  color: #d97706 !important;
+  font-weight: 600;
+}
+
+/* ─ Detail expansion row ─ */
+
+.pm-list-detail-row td {
+  padding: 10px 16px !important;
+  background: #f4f7fd;
+  border-bottom: 1px solid var(--border);
+}
+
+.pm-list-detail-panel {
+  display: flex;
+}
+
+.pm-list-detail-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #d8e2f5;
+  border-radius: 10px;
+  padding: 12px 14px;
+  max-width: 780px;
+  width: 100%;
+}
+
+.pm-list-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: #f8fbff;
+  border: 1px solid #e8eef8;
+  border-radius: 7px;
+}
+
+.pm-list-detail-item-wide {
+  grid-column: 1 / -1;
+}
+
+.pm-list-detail-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7a8aa8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pm-list-detail-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a2547;
+}
+
+/* ─ Assignee expansion row ─ */
+
+.pm-list-assignee-row td {
+  padding: 0 16px 12px !important;
+  background: #f8fbff;
 }

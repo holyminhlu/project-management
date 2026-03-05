@@ -80,6 +80,13 @@ CREATE TABLE du_an (
     FOREIGN KEY (ma_phong_ban) REFERENCES phong_ban(ma_phong_ban)
 );
 
+
+ALTER TABLE du_an
+--Add muc_do_uu_tien nvarchar(20) not null DEFAULT 0;
+ADD thiet_lap_trien_khai INT NOT NULL DEFAULT 0,
+    thiet_lap_ket_thuc INT NOT NULL DEFAULT 0;
+
+
 -- ========================
 -- BẢNG CÔNG VIỆC (ĐÃ THÊM TRẠNG THÁI)
 -- ========================

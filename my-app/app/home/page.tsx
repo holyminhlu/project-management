@@ -98,6 +98,17 @@ type PersonalProjectsResponse = {
   error?: string;
 };
 
+type DepartmentItem = {
+  ma_phong_ban: string;
+  ten_phong_ban: string;
+};
+
+type ProjectSetupResponse = {
+  departments?: DepartmentItem[];
+  members?: unknown[];
+  error?: string;
+};
+
 const headerIcons: HeaderIcon[] = [
   { title: "Giỏ hàng", src: "/icon/cart.png", alt: "Cart", showBadge: true },
   { title: "Tìm kiếm", src: "/icon/search.png", alt: "Search" },
@@ -236,6 +247,22 @@ async function getDeletedTasks(accessToken: string): Promise<DeletedTasksRespons
   }
 }
 
+async function getProjectDepartments(accessToken: string): Promise<DepartmentItem[]> {
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+  try {
+    const response = await fetch(`${backendUrl}/projects/personal/setup`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => ({}))) as ProjectSetupResponse;
+    if (!response.ok || !Array.isArray(data.departments)) return [];
+    return data.departments;
+  } catch {
+    return [];
+  }
+}
+
 async function getDeletedProjects(accessToken: string): Promise<DeletedProjectsResponse> {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
 
@@ -268,6 +295,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const isProfileView = currentView === "profile";
   const isPersonalTasksView = currentView === "personal-tasks";
   const isTrashView = currentView === "trash";
+  const isReportsView = currentView === "reports";
+  const reportParam = resolvedSearchParams?.report;
+  const currentReport = Array.isArray(reportParam) ? reportParam[0] : reportParam;
   const isSortEnabled = currentSort === "due_asc";
 
   // Auth/JWT verification is handled by backend endpoints and middleware.
@@ -280,6 +310,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const deletedTaskResult = isTrashView && accessToken ? await getDeletedTasks(accessToken) : null;
   const deletedProjectResult = isTrashView && accessToken ? await getDeletedProjects(accessToken) : null;
   const selectedProjectId = typeof currentProject === "string" && currentProject.trim() ? currentProject.trim() : "";
+  const projectDepartments = isPersonalTasksView && !selectedProjectId && accessToken ? await getProjectDepartments(accessToken) : [];
   const allTasks = personalTaskResult?.tasks || [];
   const projectMap = new Map<string, PersonalProject>();
   for (const task of allTasks) {
@@ -377,12 +408,58 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </span>{" "}
             Việc của tôi
           </div>
-          <div className="nav-item">
-            <span className="nav-icon">
-              <Image className="sidebar-icon-image" src="/icon/chart.png" alt="Chart" width={16} height={16} />
-            </span>{" "}
-            Báo cáo
-          </div>
+          <details className="nav-group" open={isReportsView || undefined}>
+            <summary className="nav-group-label">
+              <span className="nav-icon">
+                <Image className="sidebar-icon-image" src="/icon/chart.png" alt="Chart" width={16} height={16} />
+              </span>
+              Báo cáo
+            </summary>
+            <div className="nav-report-section">Báo cáo mặc định</div>
+            <Link href="/home?view=reports&report=eisenhower" className={`nav-subitem ${currentReport === "eisenhower" ? "active" : ""}`}>
+              Phân loại theo Eisenhower
+            </Link>
+            <Link href="/home?view=reports&report=slcv-thoi-gian" className={`nav-subitem ${currentReport === "slcv-thoi-gian" ? "active" : ""}`}>
+              Số lượng CV theo thời gian
+            </Link>
+            <Link href="/home?view=reports&report=slcv-nguoi-thuc-hien" className={`nav-subitem ${currentReport === "slcv-nguoi-thuc-hien" ? "active" : ""}`}>
+              Số lượng CV theo người thực hiện
+            </Link>
+            <Link href="/home?view=reports&report=slcv-nguoi-lien-quan" className={`nav-subitem ${currentReport === "slcv-nguoi-lien-quan" ? "active" : ""}`}>
+              Số lượng CV theo người liên quan
+            </Link>
+            <Link href="/home?view=reports&report=thoi-gian-thuc-hien" className={`nav-subitem ${currentReport === "thoi-gian-thuc-hien" ? "active" : ""}`}>
+              Thời gian thực hiện công việc
+            </Link>
+            <Link href="/home?view=reports&report=phan-bo-nguon-luc" className={`nav-subitem ${currentReport === "phan-bo-nguon-luc" ? "active" : ""}`}>
+              Phân bổ nguồn lực
+            </Link>
+            <Link href="/home?view=reports&report=tinh-trang-thuc-hien" className={`nav-subitem ${currentReport === "tinh-trang-thuc-hien" ? "active" : ""}`}>
+              Tình trạng thực hiện công việc
+            </Link>
+            <Link href="/home?view=reports&report=giao-cho-toi" className={`nav-subitem ${currentReport === "giao-cho-toi" ? "active" : ""}`}>
+              Việc giao cho tôi
+            </Link>
+            <Link href="/home?view=reports&report=lui-han" className={`nav-subitem ${currentReport === "lui-han" ? "active" : ""}`}>
+              Tình hình lùi hạn công việc
+            </Link>
+            <Link href="/home?view=reports&report=trien-khai-da" className={`nav-subitem ${currentReport === "trien-khai-da" ? "active" : ""}`}>
+              Tình hình triển khai dự án
+            </Link>
+            <Link href="/home?view=reports&report=gantt" className={`nav-subitem ${currentReport === "gantt" ? "active" : ""}`}>
+              Sơ đồ Gantt
+            </Link>
+            <Link href="/home?view=reports&report=hoat-dong-da" className={`nav-subitem ${currentReport === "hoat-dong-da" ? "active" : ""}`}>
+              Tình hình hoạt động dự án
+            </Link>
+            <Link href="/home?view=reports&report=toi-tao" className={`nav-subitem ${currentReport === "toi-tao" ? "active" : ""}`}>
+              Tôi tạo
+            </Link>
+            <div className="nav-report-section">Chia sẻ với tôi</div>
+            <Link href="/home?view=reports&report=chia-se-voi-toi" className={`nav-subitem ${currentReport === "chia-se-voi-toi" ? "active" : ""}`}>
+              Báo cáo chia sẻ với tôi
+            </Link>
+          </details>
 
           <div className="nav-section">Không gian làm việc</div>
 
@@ -519,7 +596,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   {personalProjectResult?.error ? <p className="pm-profile-error">{personalProjectResult.error}</p> : null}
                   {personalTaskResult?.error ? <p className="pm-profile-error">{personalTaskResult.error}</p> : null}
 
-                  <ProjectPickerClient initialProjects={personalProjects} />
+                  <ProjectPickerClient initialProjects={personalProjects} initialDepartments={projectDepartments} />
                 </>
               ) : (
                 <>
@@ -573,55 +650,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </div>
                   </div>
 
-                  <div className="pm-task-tools">
-                    <label className="pm-tool-search-wrap">
-                      <Image className="pm-tool-icon-image" src="/icon/search.png" alt="Search" width={14} height={14} />
-                      <input className="pm-tool-search" type="text" placeholder="Tìm kiếm..." />
-                    </label>
-                    <button className="pm-tool-icon-btn" type="button" aria-label="Bộ lọc">
-                      <Image className="pm-tool-icon-image" src="/icon/filter.png" alt="Filter" width={14} height={14} />
-                    </button>
-                    <div className="pm-tool-select-wrap">
-                      <select className="pm-tool-select" defaultValue="all">
-                        <option value="all">Bộ lọc trạng thái công việc</option>
-                        <option value="todo">Cần thực hiện</option>
-                        <option value="in_progress">Đang thực hiện</option>
-                        <option value="done">Đã hoàn thành</option>
-                      </select>
-                    </div>
-                    <button className="pm-tool-btn" type="button">
-                      <Image className="pm-tool-icon-image" src="/icon/nofilter.svg" alt="No Filter" width={14} height={14} />
-                      Không lọc
-                    </button>
-                    <Link
-                      className="pm-tool-btn"
-                      href={
-                        isSortEnabled
-                          ? `/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}`
-                          : `/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}&sort=due_asc`
-                      }
-                    >
-                      <Image className="pm-tool-icon-image" src="/icon/sort.svg" alt="Sort" width={14} height={14} />
-                      {isSortEnabled ? "Sắp xếp" : "Không sắp xếp"}
-                    </Link>
-                    <button className="pm-tool-btn" type="button">
-                      <Image className="pm-tool-icon-image" src="/icon/show.png" alt="Show" width={14} height={14} />
-                      Tùy chỉnh hiển thị
-                    </button>
-                    <button className="pm-tool-btn" type="button">
-                      <Image className="pm-tool-icon-image" src="/icon/export.png" alt="Export" width={14} height={14} />
-                      Xuất khẩu
-                    </button>
-                    <button className="pm-tool-btn" type="button">
-                      <Image className="pm-tool-icon-image" src="/icon/chart.png" alt="Analyze" width={14} height={14} />
-                      Phân tích công việc
-                    </button>
-                    <Link className="pm-tool-refresh" href={`/home?view=personal-tasks&project=${encodeURIComponent(selectedProjectId)}`}>
-                      <Image className="pm-tool-icon-image" src="/icon/refresh.png" alt="Refresh" width={14} height={14} />
-                      Làm mới
-                    </Link>
-                  </div>
-
                   <TaskColumnsClient
                     selectedProjectId={selectedProjectId}
                     selectedProjectName={selectedProject?.ten_du_an || selectedProjectId}
@@ -631,6 +659,64 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   />
                 </>
               )}
+            </section>
+          ) : isReportsView ? (
+            <section className="pm-reports" aria-label="Báo cáo">
+              {(() => {
+                const reportLabels: Record<string, { title: string; desc: string; icon: string }> = {
+                  eisenhower: { title: "Phân loại theo Eisenhower", desc: "Phân loại công việc theo ma trận Eisenhower (quan trọng – khẩn cấp).", icon: "🎯" },
+                  "slcv-thoi-gian": { title: "Số lượng công việc theo thời gian", desc: "Thống kê số lượng công việc được tạo, hoàn thành và đang thực hiện theo từng mốc thời gian.", icon: "📅" },
+                  "slcv-nguoi-thuc-hien": { title: "Số lượng công việc theo người thực hiện", desc: "Phân tích phân bổ công việc theo từng thành viên thực hiện.", icon: "👤" },
+                  "slcv-nguoi-lien-quan": { title: "Số lượng công việc theo người liên quan", desc: "Thống kê công việc theo từng người liên quan.", icon: "👥" },
+                  "thoi-gian-thuc-hien": { title: "Thời gian thực hiện công việc", desc: "Phân tích thời gian trung bình và thực tế để hoàn thành từng loại công việc.", icon: "⏱️" },
+                  "phan-bo-nguon-luc": { title: "Phân bổ nguồn lực", desc: "Xem mức độ sử dụng nhân lực và phân bổ tài nguyên trong các dự án.", icon: "📊" },
+                  "tinh-trang-thuc-hien": { title: "Tình trạng thực hiện công việc", desc: "Báo cáo tổng quan về trạng thái công việc: chưa làm, đang làm, hoàn thành.", icon: "📋" },
+                  "giao-cho-toi": { title: "Việc giao cho tôi", desc: "Danh sách và thống kê các công việc được giao cho bạn.", icon: "📌" },
+                  "lui-han": { title: "Tình hình lùi hạn công việc", desc: "Theo dõi các công việc bị trễ hạn và mức độ lùi hạn.", icon: "⚠️" },
+                  "trien-khai-da": { title: "Tình hình triển khai dự án", desc: "Tổng quan về tiến độ và tình trạng triển khai các dự án.", icon: "🚀" },
+                  gantt: { title: "Sơ đồ Gantt", desc: "Biểu đồ Gantt hiển thị tiến độ công việc và dự án theo trục thời gian.", icon: "📉" },
+                  "hoat-dong-da": { title: "Tình hình hoạt động dự án", desc: "Lịch sử và thống kê các hoạt động diễn ra trong dự án.", icon: "📈" },
+                  "toi-tao": { title: "Tôi tạo", desc: "Danh sách và thống kê các báo cáo do bạn tạo.", icon: "✏️" },
+                  "chia-se-voi-toi": { title: "Báo cáo chia sẻ với tôi", desc: "Các báo cáo mà người khác đã chia sẻ với bạn.", icon: "🤝" },
+                };
+                if (!currentReport) {
+                  return (
+                    <div className="pm-report-overview">
+                      <div className="pm-report-overview-icon">📊</div>
+                      <h2 className="pm-report-overview-title">Báo cáo</h2>
+                      <p className="pm-report-overview-desc">
+                        Chọn một loại báo cáo từ menu bên trái để xem thống kê và phân tích công việc.
+                      </p>
+                      <div className="pm-report-overview-grid">
+                        {Object.entries(reportLabels).slice(0, 6).map(([key, info]) => (
+                          <Link key={key} href={`/home?view=reports&report=${key}`} className="pm-report-overview-card">
+                            <span className="pm-report-overview-card-icon">{info.icon}</span>
+                            <span className="pm-report-overview-card-title">{info.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                const info = reportLabels[currentReport];
+                return (
+                  <div className="pm-report-view">
+                    <div className="pm-report-view-header">
+                      <span className="pm-report-view-icon">{info?.icon ?? "📊"}</span>
+                      <div>
+                        <h2 className="pm-report-view-title">{info?.title ?? currentReport}</h2>
+                        {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                      </div>
+                    </div>
+                    <div className="pm-report-view-body">
+                      <div className="pm-report-wip">
+                        <span className="pm-report-wip-icon">🔧</span>
+                        <p className="pm-report-wip-text">Báo cáo này đang được phát triển. Vui lòng quay lại sau.</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
           ) : isTrashView ? (
             <>
