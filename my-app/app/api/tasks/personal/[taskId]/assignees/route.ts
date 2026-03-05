@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 
 type AddAssigneePayload = {
   ma_nhan_vien?: string;
@@ -21,19 +22,12 @@ export async function POST(request: Request, context: { params: Promise<{ taskId
       return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}/tasks/personal/${encodeURIComponent(maCongViec)}/assignees`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    });
-
-    const data = await backendResponse.json().catch(() => ({}));
-    return NextResponse.json(data, { status: backendResponse.status });
+    const { data, status } = await serverApi(
+      "tasks",
+      `/tasks/personal/${encodeURIComponent(maCongViec)}/assignees`,
+      { method: "POST", token: accessToken, body },
+    );
+    return NextResponse.json(data ?? {}, { status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
     return NextResponse.json(

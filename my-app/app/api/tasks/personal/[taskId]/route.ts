@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 
 type UpdateTaskStatusPayload = {
   status_key?: "todo" | "in_progress" | "done" | "deleted";
@@ -21,25 +22,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
       return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
     const isDeleted = body?.status_key === "deleted";
-    const backendResponse = await fetch(
-      isDeleted
-        ? `${backendUrl}/tasks/personal/${encodeURIComponent(maCongViec)}/delete`
-        : `${backendUrl}/tasks/personal/${encodeURIComponent(maCongViec)}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: isDeleted ? undefined : JSON.stringify(body),
-        cache: "no-store",
-      },
-    );
+    const path = isDeleted
+      ? `/tasks/personal/${encodeURIComponent(maCongViec)}/delete`
+      : `/tasks/personal/${encodeURIComponent(maCongViec)}`;
 
-    const data = await backendResponse.json().catch(() => ({}));
-    return NextResponse.json(data, { status: backendResponse.status });
+    const { data, status } = await serverApi("tasks", path, {
+      method: "PATCH",
+      token: accessToken,
+      ...(isDeleted ? {} : { body }),
+    });
+    return NextResponse.json(data ?? {}, { status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
     return NextResponse.json(

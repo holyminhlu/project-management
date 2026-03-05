@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 
 type CreateTaskPayload = {
   ma_du_an?: string;
@@ -20,19 +21,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}/tasks/personal`, {
+    const { data, status } = await serverApi("tasks", "/tasks/personal", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
+      token: accessToken,
+      body,
     });
-
-    const data = await backendResponse.json().catch(() => ({}));
-    return NextResponse.json(data, { status: backendResponse.status });
+    return NextResponse.json(data ?? {}, { status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
     return NextResponse.json(

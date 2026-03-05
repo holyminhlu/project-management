@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { clientApi } from "@/lib/api/client";
 
 type TaskStatusKey = "todo" | "in_progress" | "done";
 
@@ -304,45 +305,30 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
 
     setSubmitting(true);
     setError("");
-
-    try {
-      const payload = {
-        ma_du_an: selectedProjectId,
-        tieu_de,
-        mo_ta: form.mo_ta.trim(),
-        do_uu_tien: form.do_uu_tien,
-        han_hoan_thanh: form.han_hoan_thanh || null,
-        status_key: status,
-      };
-
-      const response = await fetch("/api/tasks/personal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as {
-        task?: PersonalTask;
-        error?: string;
-      };
-
-      if (!response.ok || !data.task) {
-        setError(data.error || "Không thể tạo công việc.");
-        return;
-      }
-
-      const createdTask = data.task as PersonalTask;
-      if (!createdTask.ngay_tao) {
-        createdTask.ngay_tao = new Date().toISOString();
-      }
-      setTasks((prev) => [createdTask, ...prev]);
-      setOpenStatus(null);
-      setForm(DEFAULT_FORM);
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setSubmitting(false);
+    const payload = {
+      ma_du_an: selectedProjectId,
+      tieu_de,
+      mo_ta: form.mo_ta.trim(),
+      do_uu_tien: form.do_uu_tien,
+      han_hoan_thanh: form.han_hoan_thanh || null,
+      status_key: status,
+    };
+    const { data, ok, error } = await clientApi<{ task?: PersonalTask; error?: string }>(
+      "/api/tasks/personal",
+      { method: "POST", body: payload },
+    );
+    setSubmitting(false);
+    if (!ok || !data?.task) {
+      setError(error ?? "Không thể tạo công việc.");
+      return;
     }
+    const createdTask = data.task as PersonalTask;
+    if (!createdTask.ngay_tao) {
+      createdTask.ngay_tao = new Date().toISOString();
+    }
+    setTasks((prev) => [createdTask, ...prev]);
+    setOpenStatus(null);
+    setForm(DEFAULT_FORM);
   }
 
   async function moveTask(taskId: string, nextStatus: TaskStatusKey) {
@@ -362,25 +348,12 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
       ),
     );
 
-    try {
-      const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status_key: nextStatus }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setTasks((prev) =>
-          prev.map((task) =>
-            task.ma_cong_viec === taskId
-              ? { ...task, status_key: previousStatus, trang_thai_cong_viec: statusToLabel(previousStatus) }
-              : task,
-          ),
-        );
-        setError(data.error || "Không thể cập nhật trạng thái công việc.");
-      }
-    } catch {
+    const { ok, error } = await clientApi<{ error?: string }>(
+      `/api/tasks/personal/${encodeURIComponent(taskId)}`,
+      { method: "PATCH", body: { status_key: nextStatus } },
+    );
+    setMoving(false);
+    if (!ok) {
       setTasks((prev) =>
         prev.map((task) =>
           task.ma_cong_viec === taskId
@@ -388,9 +361,7 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
             : task,
         ),
       );
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setMoving(false);
+      setError(error ?? "Không thể cập nhật trạng thái công việc.");
     }
   }
 
@@ -428,43 +399,32 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
 
     setAddingAssignee(true);
     setError("");
-    try {
-      const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}/assignees`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ma_nhan_vien: memberId }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as {
-        assignee?: { ma_nhan_vien?: string; ten_nv?: string };
-        error?: string;
-      };
-
-      if (!response.ok) {
-        setError(data.error || "Không thể thêm người làm cho công việc.");
-        return;
-      }
-
-      if (data.assignee?.ma_nhan_vien && data.assignee?.ten_nv) {
-        const newAssignee: TaskAssignee = {
-          ma_nhan_vien: data.assignee.ma_nhan_vien,
-          ten_nv: data.assignee.ten_nv,
-        };
-        setTasks((prev) =>
-          prev.map((task) =>
-            task.ma_cong_viec === taskId
-              ? { ...task, assignees: [...(task.assignees || []), newAssignee] }
-              : task,
-          ),
-        );
-      }
-
-      setAssigneeTaskId(null);
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setAddingAssignee(false);
+    const { data, ok, error } = await clientApi<{
+      assignee?: { ma_nhan_vien?: string; ten_nv?: string };
+      error?: string;
+    }>(
+      `/api/tasks/personal/${encodeURIComponent(taskId)}/assignees`,
+      { method: "POST", body: { ma_nhan_vien: memberId } },
+    );
+    setAddingAssignee(false);
+    if (!ok) {
+      setError(error ?? "Không thể thêm người làm cho công việc.");
+      return;
     }
+    if (data?.assignee?.ma_nhan_vien && data.assignee?.ten_nv) {
+      const newAssignee: TaskAssignee = {
+        ma_nhan_vien: data.assignee.ma_nhan_vien,
+        ten_nv: data.assignee.ten_nv,
+      };
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.ma_cong_viec === taskId
+            ? { ...task, assignees: [...(task.assignees || []), newAssignee] }
+            : task,
+        ),
+      );
+    }
+    setAssigneeTaskId(null);
   }
 
   async function onDropColumn(status: TaskStatusKey) {
@@ -481,23 +441,16 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
 
     setDeletingTaskId(taskId);
     setError("");
-    try {
-      const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status_key: "deleted" }),
-      });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(data.error || "Không thể xóa công việc.");
-        return;
-      }
-      setTasks((prev) => prev.filter((task) => task.ma_cong_viec !== taskId));
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setDeletingTaskId(null);
+    const { ok, error } = await clientApi<{ error?: string }>(
+      `/api/tasks/personal/${encodeURIComponent(taskId)}`,
+      { method: "PATCH", body: { status_key: "deleted" } },
+    );
+    setDeletingTaskId(null);
+    if (!ok) {
+      setError(error ?? "Không thể xóa công việc.");
+      return;
     }
+    setTasks((prev) => prev.filter((task) => task.ma_cong_viec !== taskId));
   }
 
   function renderForm(status: TaskStatusKey) {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { clientApi } from "@/lib/api/client";
 
 type PersonalProject = {
   ma_du_an: string;
@@ -117,18 +118,16 @@ export default function ProjectPickerClient({
   async function fetchSetupData() {
     const setupEndpoints = ["/api/tasks/personal/setup", "/api/projects/personal/setup", "/api/projects/personal?setup=1"];
     for (const endpoint of setupEndpoints) {
-      const response = await fetch(endpoint, { cache: "no-store" });
-      const data = (await response.json().catch(() => ({}))) as {
+      const { data, ok, status } = await clientApi<{
         departments?: Department[];
         members?: Member[];
         error?: string;
-      };
-      if (response.ok) return data;
-      if (response.status !== 404) {
-        throw new Error(data.error || "Không thể tải dữ liệu tạo dự án.");
+      }>(endpoint);
+      if (ok) return data ?? {};
+      if (status !== 404) {
+        throw new Error((data as { error?: string } | null)?.error ?? "Không thể tải dữ liệu tạo dự án.");
       }
     }
-
     throw new Error("Không thể tải danh sách phòng ban. Vui lòng tải lại trang.");
   }
 
@@ -173,42 +172,31 @@ export default function ProjectPickerClient({
 
     setSubmitting(true);
     setError("");
-    try {
-      const payload = {
-        ten_du_an,
-        ma_phong_ban: form.ma_phong_ban,
-        mo_ta: form.mo_ta.trim(),
-        ngay_bat_dau: form.ngay_bat_dau,
-        ngay_ket_thuc: form.ngay_ket_thuc,
-        ngay_tao_du_an: form.ngay_tao_du_an,
-        thiet_lap_trien_khai: Number.parseInt(form.thiet_lap_trien_khai || "0", 10) || 0,
-        thiet_lap_den_han: Number.parseInt(form.thiet_lap_den_han || "0", 10) || 0,
-        muc_do_uu_tien: form.muc_do_uu_tien,
-        member_ids: form.member_ids,
-      };
-      const response = await fetch("/api/projects/personal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await response.json().catch(() => ({}))) as {
-        project?: PersonalProject;
-        error?: string;
-      };
-      if (!response.ok || !data.project) {
-        setError(data.error || "Không thể tạo dự án.");
-        return;
-      }
-
-      setProjects((prev) =>
-        [data.project as PersonalProject, ...prev].sort((a, b) => a.ten_du_an.localeCompare(b.ten_du_an, "vi")),
-      );
-      closeCreateModal();
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setSubmitting(false);
+    const payload = {
+      ten_du_an,
+      ma_phong_ban: form.ma_phong_ban,
+      mo_ta: form.mo_ta.trim(),
+      ngay_bat_dau: form.ngay_bat_dau,
+      ngay_ket_thuc: form.ngay_ket_thuc,
+      ngay_tao_du_an: form.ngay_tao_du_an,
+      thiet_lap_trien_khai: Number.parseInt(form.thiet_lap_trien_khai || "0", 10) || 0,
+      thiet_lap_den_han: Number.parseInt(form.thiet_lap_den_han || "0", 10) || 0,
+      muc_do_uu_tien: form.muc_do_uu_tien,
+      member_ids: form.member_ids,
+    };
+    const { data, ok, error } = await clientApi<{ project?: PersonalProject; error?: string }>(
+      "/api/projects/personal",
+      { method: "POST", body: payload },
+    );
+    setSubmitting(false);
+    if (!ok || !data?.project) {
+      setError(error ?? "Không thể tạo dự án.");
+      return;
     }
+    setProjects((prev) =>
+      [data.project as PersonalProject, ...prev].sort((a, b) => a.ten_du_an.localeCompare(b.ten_du_an, "vi")),
+    );
+    closeCreateModal();
   }
 
   async function deleteProject(projectId: string, projectName: string) {
@@ -217,22 +205,16 @@ export default function ProjectPickerClient({
 
     setDeletingProjectId(projectId);
     setError("");
-    try {
-      const response = await fetch(`/api/projects/personal/${encodeURIComponent(projectId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(data.error || "Không thể xóa dự án.");
-        return;
-      }
-      setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
-      setDeletingProjectId(null);
+    const { ok, error } = await clientApi(
+      `/api/projects/personal/${encodeURIComponent(projectId)}`,
+      { method: "PATCH" },
+    );
+    setDeletingProjectId(null);
+    if (!ok) {
+      setError(error ?? "Không thể xóa dự án.");
+      return;
     }
+    setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
   }
 
   return (

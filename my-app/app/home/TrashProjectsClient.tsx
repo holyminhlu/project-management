@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { clientApi } from "@/lib/api/client";
 
 type DeletedProject = {
     ma_du_an: string;
@@ -20,22 +21,17 @@ export default function TrashProjectsClient({ initialProjects }: Props) {
     async function restoreProject(projectId: string) {
         setBusyId(projectId);
         setError("");
-        try {
-            const response = await fetch(`/api/projects/personal/${encodeURIComponent(projectId)}/restore`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-            });
-            const data = (await response.json().catch(() => ({}))) as { error?: string };
-            if (!response.ok) {
-                setError(data.error || "Không thể khôi phục dự án.");
-                return;
-            }
-            setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
-        } catch {
-            setError("Không thể kết nối máy chủ.");
-        } finally {
+        const { ok, error } = await clientApi(
+            `/api/projects/personal/${encodeURIComponent(projectId)}/restore`,
+            { method: "PATCH" },
+        );
+        if (!ok) {
+            setError(error ?? "Không thể khôi phục dự án.");
             setBusyId(null);
+            return;
         }
+        setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
+        setBusyId(null);
     }
 
     async function permanentDeleteProject(projectId: string, projectName: string) {
@@ -46,22 +42,17 @@ export default function TrashProjectsClient({ initialProjects }: Props) {
 
         setBusyId(projectId);
         setError("");
-        try {
-            const response = await fetch(`/api/projects/personal/${encodeURIComponent(projectId)}/permanent-delete`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-            });
-            const data = (await response.json().catch(() => ({}))) as { error?: string };
-            if (!response.ok) {
-                setError(data.error || "Không thể xóa vĩnh viễn dự án.");
-                return;
-            }
-            setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
-        } catch {
-            setError("Không thể kết nối máy chủ.");
-        } finally {
+        const { ok, error } = await clientApi(
+            `/api/projects/personal/${encodeURIComponent(projectId)}/permanent-delete`,
+            { method: "PATCH" },
+        );
+        if (!ok) {
+            setError(error ?? "Không thể xóa vĩnh viễn dự án.");
             setBusyId(null);
+            return;
         }
+        setProjects((prev) => prev.filter((p) => p.ma_du_an !== projectId));
+        setBusyId(null);
     }
 
     return (

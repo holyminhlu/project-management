@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 
 export async function GET() {
   try {
@@ -10,15 +11,8 @@ export async function GET() {
       return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}/auth/me`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-
-    const data = (await backendResponse.json().catch(() => ({}))) as unknown;
-    return NextResponse.json(data, { status: backendResponse.status });
+    const { data, status } = await serverApi("auth", "/auth/me", { token: accessToken });
+    return NextResponse.json(data ?? {}, { status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
     return NextResponse.json(

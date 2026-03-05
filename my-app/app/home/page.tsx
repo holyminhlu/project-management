@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 import AvatarMenu from "./AvatarMenu";
 import ProjectPickerClient from "./ProjectPickerClient";
 import TaskColumnsClient from "./TaskColumnsClient";
@@ -141,60 +142,21 @@ function toInitials(name: string) {
 }
 
 async function getProfile(accessToken: string): Promise<MeResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/auth/me`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as MeResponse;
-    if (!response.ok || !data.user) {
-      return { error: data.error || "Không thể tải thông tin cá nhân." };
-    }
-    return { user: data.user };
-  } catch {
-    return { error: "Không thể kết nối máy chủ để tải thông tin cá nhân." };
-  }
+  const { data, ok } = await serverApi<MeResponse>("auth", "/auth/me", { token: accessToken });
+  if (!ok || !data?.user) return { error: data?.error ?? "Không thể tải thông tin cá nhân." };
+  return { user: data.user };
 }
 
 async function getPersonalTasks(accessToken: string): Promise<PersonalTasksResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/tasks/personal`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as PersonalTasksResponse;
-    if (!response.ok || !Array.isArray(data.tasks)) {
-      return { error: data.error || "Không thể tải công việc cá nhân." };
-    }
-    return { tasks: data.tasks };
-  } catch {
-    return { error: "Không thể kết nối máy chủ để tải công việc cá nhân." };
-  }
+  const { data, ok } = await serverApi<PersonalTasksResponse>("tasks", "/tasks/personal", { token: accessToken });
+  if (!ok || !Array.isArray(data?.tasks)) return { error: data?.error ?? "Không thể tải công việc cá nhân." };
+  return { tasks: data!.tasks };
 }
 
 async function getPersonalProjects(accessToken: string): Promise<PersonalProjectsResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/projects/personal`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as PersonalProjectsResponse;
-    if (!response.ok || !Array.isArray(data.projects)) {
-      return { error: data.error || "KhÃ´ng thá»ƒ táº£i dá»± Ã¡n cÃ¡ nhÃ¢n." };
-    }
-    return { projects: data.projects };
-  } catch {
-    return { error: "KhÃ´ng thá»ƒ káº¿t ná»‘i mÃ¡y chá»§ Ä‘á»ƒ táº£i dá»± Ã¡n cÃ¡ nhÃ¢n." };
-  }
+  const { data, ok } = await serverApi<PersonalProjectsResponse>("projects", "/projects/personal", { token: accessToken });
+  if (!ok || !Array.isArray(data?.projects)) return { error: data?.error ?? "Không thể tải dự án cá nhân." };
+  return { projects: data!.projects };
 }
 
 type ProjectMember = {
@@ -210,76 +172,31 @@ type ProjectMembersResponse = {
 };
 
 async function getProjectMembers(accessToken: string, projectId: string): Promise<ProjectMembersResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/projects/personal/${encodeURIComponent(projectId)}/members`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as ProjectMembersResponse;
-    if (!response.ok || !Array.isArray(data.members)) {
-      return { error: data.error || "Không thể tải thành viên dự án." };
-    }
-    return { members: data.members };
-  } catch {
-    return { error: "Không thể kết nối máy chủ để tải thành viên dự án." };
-  }
+  const { data, ok } = await serverApi<ProjectMembersResponse>(
+    "projects",
+    `/projects/personal/${encodeURIComponent(projectId)}/members`,
+    { token: accessToken },
+  );
+  if (!ok || !Array.isArray(data?.members)) return { error: data?.error ?? "Không thể tải thành viên dự án." };
+  return { members: data!.members };
 }
 
 async function getDeletedTasks(accessToken: string): Promise<DeletedTasksResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/tasks/personal/deleted`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as DeletedTasksResponse;
-    if (!response.ok || !Array.isArray(data.tasks)) {
-      return { error: data.error || "Không thể tải công việc đã xóa." };
-    }
-    return { tasks: data.tasks };
-  } catch {
-    return { error: "Không thể kết nối máy chủ để tải công việc đã xóa." };
-  }
+  const { data, ok } = await serverApi<DeletedTasksResponse>("tasks", "/tasks/personal/deleted", { token: accessToken });
+  if (!ok || !Array.isArray(data?.tasks)) return { error: data?.error ?? "Không thể tải công việc đã xóa." };
+  return { tasks: data!.tasks };
 }
 
 async function getProjectDepartments(accessToken: string): Promise<DepartmentItem[]> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-  try {
-    const response = await fetch(`${backendUrl}/projects/personal/setup`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as ProjectSetupResponse;
-    if (!response.ok || !Array.isArray(data.departments)) return [];
-    return data.departments;
-  } catch {
-    return [];
-  }
+  const { data, ok } = await serverApi<ProjectSetupResponse>("projects", "/projects/personal/setup", { token: accessToken });
+  if (!ok || !Array.isArray(data?.departments)) return [];
+  return data!.departments!;
 }
 
 async function getDeletedProjects(accessToken: string): Promise<DeletedProjectsResponse> {
-  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-
-  try {
-    const response = await fetch(`${backendUrl}/projects/personal/deleted`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => ({}))) as DeletedProjectsResponse;
-    if (!response.ok || !Array.isArray(data.projects)) {
-      return { error: data.error || "Không thể tải dự án đã xóa." };
-    }
-    return { projects: data.projects };
-  } catch {
-    return { error: "Không thể kết nối máy chủ để tải dự án đã xóa." };
-  }
+  const { data, ok } = await serverApi<DeletedProjectsResponse>("projects", "/projects/personal/deleted", { token: accessToken });
+  if (!ok || !Array.isArray(data?.projects)) return { error: data?.error ?? "Không thể tải dự án đã xóa." };
+  return { projects: data!.projects };
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {

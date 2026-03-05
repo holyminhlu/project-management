@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { serverApi } from "@/lib/api/server";
 
 type CreateProjectPayload = {
   ten_du_an?: string;
@@ -25,18 +26,10 @@ export async function GET(request: Request) {
 
     const requestUrl = new URL(request.url);
     const isSetup = requestUrl.searchParams.get("setup") === "1";
-    const targetPath = isSetup ? "/projects/personal/setup" : "/projects/personal";
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}${targetPath}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
-    });
+    const path = isSetup ? "/projects/personal/setup" : "/projects/personal";
 
-    const data = await backendResponse.json().catch(() => ({}));
-    return NextResponse.json(data, { status: backendResponse.status });
+    const { data, status } = await serverApi("projects", path, { token: accessToken });
+    return NextResponse.json(data ?? {}, { status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
     return NextResponse.json(
@@ -56,8 +49,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}/projects/personal`, {
+    const { data, status } = await serverApi("projects", "/projects/personal", {
+      method: "POST",
+      token: accessToken,
+      body,
+    });
+    return NextResponse.json(data ?? {}, { status });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Lỗi máy chủ.";
+    return NextResponse.json(
+      { error: process.env.NODE_ENV === "development" ? message : "Lỗi máy chủ." },
+      { status: 500 },
+    );
+  }
+}
       method: "POST",
       headers: {
         "Content-Type": "application/json",

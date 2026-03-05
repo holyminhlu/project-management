@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverApi } from "@/lib/api/server";
 
 type BackendLoginResponse = {
   message?: string;
@@ -24,26 +25,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Vui lòng nhập email và mật khẩu." }, { status: 400 });
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
-    const backendResponse = await fetch(`${backendUrl}/auth/login`, {
+    const { data, status, ok } = await serverApi<BackendLoginResponse>("auth", "/auth/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-      cache: "no-store",
+      body: { email, password },
     });
 
-    const data = (await backendResponse
-      .json()
-      .catch(() => ({}))) as BackendLoginResponse;
-
-    if (!backendResponse.ok) {
+    if (!ok) {
       return NextResponse.json(
-        { error: data.error ?? "Đăng nhập thất bại." },
-        { status: backendResponse.status },
+        { error: data?.error ?? "Đăng nhập thất bại." },
+        { status: status || 502 },
       );
     }
 
-    if (!data.accessToken || !data.refreshToken || !data.user) {
+    if (!data?.accessToken || !data?.refreshToken || !data?.user) {
       return NextResponse.json({ error: "Phản hồi đăng nhập không hợp lệ." }, { status: 502 });
     }
 

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
+import { clientApi } from "@/lib/api/client";
 
 type DeletedTask = {
   ma_cong_viec: string;
@@ -35,23 +36,17 @@ export default function TrashTasksClient({ initialTasks }: Props) {
   async function restoreTask(taskId: string, statusKey: "todo" | "in_progress") {
     setBusyId(taskId);
     setError("");
-    try {
-      const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}/restore`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status_key: statusKey }),
-      });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(data.error || "Không thể khôi phục công việc.");
-        return;
-      }
-      setTasks((prev) => prev.filter((t) => t.ma_cong_viec !== taskId));
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
+    const { ok, error } = await clientApi(
+      `/api/tasks/personal/${encodeURIComponent(taskId)}/restore`,
+      { method: "PATCH", body: { status_key: statusKey } },
+    );
+    if (!ok) {
+      setError(error ?? "Không thể khôi phục công việc.");
       setBusyId(null);
+      return;
     }
+    setTasks((prev) => prev.filter((t) => t.ma_cong_viec !== taskId));
+    setBusyId(null);
   }
 
   async function deletePermanently(taskId: string) {
@@ -59,19 +54,17 @@ export default function TrashTasksClient({ initialTasks }: Props) {
     if (!confirmed) return;
     setBusyId(taskId);
     setError("");
-    try {
-      const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}/permanent`, { method: "DELETE" });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(data.error || "Không thể xóa vĩnh viễn.");
-        return;
-      }
-      setTasks((prev) => prev.filter((t) => t.ma_cong_viec !== taskId));
-    } catch {
-      setError("Không thể kết nối máy chủ.");
-    } finally {
+    const { ok, error } = await clientApi(
+      `/api/tasks/personal/${encodeURIComponent(taskId)}/permanent`,
+      { method: "DELETE" },
+    );
+    if (!ok) {
+      setError(error ?? "Không thể xóa vĩnh viễn.");
       setBusyId(null);
+      return;
     }
+    setTasks((prev) => prev.filter((t) => t.ma_cong_viec !== taskId));
+    setBusyId(null);
   }
 
   return (
