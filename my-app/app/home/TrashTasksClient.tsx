@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -98,15 +98,35 @@ export default function TrashTasksClient({ initialTasks }: Props) {
               <p>Thời gian xóa: {formatDateTime(task.deleted_at)}</p>
 
               <div className="pm-trash-actions">
-                <button type="button" disabled={busyId === task.ma_cong_viec} onClick={() => void restoreTask(task.ma_cong_viec, "todo")}>
-                  Chuyển sang Cần thực hiện
-                </button>
-                <button type="button" disabled={busyId === task.ma_cong_viec} onClick={() => void restoreTask(task.ma_cong_viec, "in_progress")}>
-                  Chuyển sang Đang thực hiện
-                </button>
-                <button type="button" disabled={busyId === task.ma_cong_viec} onClick={() => void deletePermanently(task.ma_cong_viec)}>
-                  Xóa vĩnh viễn
-                </button>
+                <select
+                  disabled={busyId === task.ma_cong_viec}
+                  defaultValue=""
+                  onChange={(e) => {
+                    const action = e.target.value;
+                    e.target.value = "";
+
+                    if (action === "restore_todo") {
+                      void restoreTask(task.ma_cong_viec, "todo");
+                      return;
+                    }
+
+                    if (action === "restore_in_progress") {
+                      void restoreTask(task.ma_cong_viec, "in_progress");
+                      return;
+                    }
+
+                    if (action === "delete_permanent") {
+                      void deletePermanently(task.ma_cong_viec);
+                    }
+                  }}
+                >
+                  <option value="" disabled>
+                    Tùy chọn
+                  </option>
+                  <option value="restore_todo">Chuyển sang Cần thực hiện</option>
+                  <option value="restore_in_progress">Chuyển sang Đang thực hiện</option>
+                  <option value="delete_permanent">Xóa vĩnh viễn</option>
+                </select>
               </div>
             </article>
           ))

@@ -999,12 +999,85 @@ tbody td:first-child {
   font-weight: 700;
 }
 
-.pm-project-card-cta {
+.pm-project-card-footer {
   margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pm-project-card-cta {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent);
-  text-align: right;
+}
+
+.pm-project-delete-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid #f1ccd0;
+  background: #fff5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.pm-project-delete-btn:hover {
+  background: #ffe0e3;
+  border-color: #e8a2a9;
+}
+
+.pm-project-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pm-trash-restore-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #b8cdf5;
+  background: #edf3ff;
+  color: #2057d4;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.pm-trash-restore-btn:hover {
+  background: #d5e3ff;
+}
+
+.pm-trash-restore-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pm-trash-permdelete-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #f1ccd0;
+  background: #fff5f5;
+  color: #c0392b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.pm-trash-permdelete-btn:hover {
+  background: #ffe0e3;
+  border-color: #e8a2a9;
+}
+
+.pm-trash-permdelete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pm-project-empty {
@@ -1016,6 +1089,191 @@ tbody td:first-child {
   font-size: 13px;
   color: var(--text-muted);
   text-align: center;
+}
+
+.pm-project-add-card {
+  border: 1px dashed #b8c6e4;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #f8fbff 0%, #edf3ff 100%);
+  min-height: 184px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+
+.pm-project-add-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
+.pm-project-add-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #d8e2f7;
+  color: var(--accent);
+  font-size: 34px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-project-add-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2f436d;
+}
+
+.pm-project-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 25, 41, 0.45);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pm-project-modal {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 34px rgba(14, 25, 47, 0.2);
+}
+
+.pm-project-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pm-project-modal-head h3 {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.pm-project-modal-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pm-project-modal-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pm-project-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pm-project-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-project-form-field span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a5879;
+}
+
+.pm-project-form-field input,
+.pm-project-form-field select,
+.pm-project-form-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+
+.pm-project-form-field textarea {
+  resize: vertical;
+}
+
+.pm-project-form-field input:focus,
+.pm-project-form-field select:focus,
+.pm-project-form-field textarea:focus {
+  border-color: #8ab0ff;
+  box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.14);
+}
+
+.pm-project-member-picker {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-project-member-option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #ebeff8;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #f8faff;
+}
+
+.pm-project-member-option span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.pm-project-member-option small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pm-project-member-picker-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px;
+}
+
+.pm-project-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border);
 }
 
 .pm-task-tools {
@@ -1047,6 +1305,178 @@ tbody td:first-child {
   padding: 8px 2px;
   border-left: 1px solid var(--border);
   padding-left: 12px;
+}
+
+.pm-project-members {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px 8px 6px 10px;
+}
+
+.pm-project-members-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pm-project-member-avatars {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 2px;
+}
+
+.pm-project-member-avatar,
+.pm-project-member-more {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  margin-left: -10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(26, 31, 46, 0.18);
+}
+
+.pm-project-member-avatar:first-child,
+.pm-project-member-more:first-child {
+  margin-left: 0;
+}
+
+.pm-project-member-avatar {
+  color: #fff;
+}
+
+.pm-project-member-avatar-1 {
+  background: linear-gradient(135deg, #4f8ef7, #2f6fd6);
+}
+
+.pm-project-member-avatar-2 {
+  background: linear-gradient(135deg, #20b486, #168a66);
+}
+
+.pm-project-member-avatar-3 {
+  background: linear-gradient(135deg, #f08a4b, #d66a2f);
+}
+
+.pm-project-member-avatar-4 {
+  background: linear-gradient(135deg, #8b78f7, #6554cd);
+}
+
+.pm-project-member-avatar-5 {
+  background: linear-gradient(135deg, #ef5f8f, #cb3f70);
+}
+
+.pm-project-member-more {
+  background: #eaf0ff;
+  color: #30407a;
+  font-size: 10px;
+}
+
+.pm-project-members-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.pm-project-members-menu {
+  position: relative;
+}
+
+.pm-project-members-more {
+  list-style: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+  cursor: pointer;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.pm-project-members-more:hover {
+  background: var(--row-hover);
+  border-color: #cad3e4;
+}
+
+.pm-project-members-menu[open] .pm-project-members-more {
+  background: #edf3ff;
+  border-color: #b9c8e7;
+}
+
+.pm-project-members-more::-webkit-details-marker {
+  display: none;
+}
+
+.pm-project-members-dropdown {
+  position: absolute;
+  right: 0;
+  top: 38px;
+  width: 270px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(26, 31, 46, 0.16);
+  padding: 12px;
+  z-index: 20;
+}
+
+.pm-project-members-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-project-members-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-main);
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.pm-project-members-list-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pm-project-members-list-name {
+  font-weight: 600;
+}
+
+.pm-project-members-empty-list {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px;
 }
 
 .pm-tool-search-wrap {
@@ -1324,57 +1754,92 @@ tbody td:first-child {
   line-height: 1.5;
 }
 
-.pm-task-assignee {
+/* ── Task card: assignee row ── */
+.pm-task-assignees-row {
   margin-top: 8px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
 }
 
-.pm-task-assignee-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: #e8f0ff;
-  color: #2057d4;
-  font-size: 10px;
-  font-weight: 800;
-  display: inline-flex;
+.pm-task-assignee-avatar-group {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid #cddcfb;
   flex-shrink: 0;
 }
 
-.pm-task-assignee-name {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 600;
+.pm-task-avatar {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  margin-left: -7px;
+  position: relative;
 }
 
+.pm-task-avatar:first-child {
+  margin-left: 0;
+}
+
+.pm-task-avatar-extra {
+  background-color: #c8d5ec !important;
+  color: #3a4e82;
+  font-size: 8px;
+}
+
+.pm-task-assignee-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.pm-task-assignee-none {
+  font-size: 11px;
+  color: #b0b8c9;
+  font-style: italic;
+}
+
+/* ── + button on task card ── */
 .pm-task-assignee-plus {
   position: absolute;
   left: 8px;
   top: 8px;
   width: 20px;
   height: 20px;
-  border-radius: 999px;
-  border: 1px solid #cddcfb;
-  background: #f2f7ff;
+  border-radius: 50%;
+  border: 1.5px solid #b8cdf5;
+  background: #edf3ff;
   color: #2057d4;
   font-size: 14px;
   line-height: 1;
   font-weight: 700;
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
+  transition: transform 0.15s, background 0.15s;
 }
 
 .pm-task-assignee-plus:hover {
-  background: #e7f0ff;
+  background: #d5e3ff;
+  border-color: #90aee8;
+  transform: scale(1.12);
 }
 
+/* ── Delete button ── */
 .pm-task-delete-btn {
   position: absolute;
   right: 8px;
@@ -1385,7 +1850,7 @@ tbody td:first-child {
   border: 1px solid #f1ccd0;
   background: #fff2f3;
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -1401,51 +1866,215 @@ tbody td:first-child {
   padding-right: 24px;
 }
 
-.pm-task-assignee-form {
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
+/* ═══════════════════════════════════════
+   Assignee Panel (dropdown inside card)
+   ═══════════════════════════════════════ */
+.pm-assignee-panel {
+  margin-top: 10px;
+  border: 1px solid #c8d4ed;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(30, 50, 100, 0.10);
+  overflow: hidden;
+}
+
+/* ─ Panel header ─ */
+.pm-assignee-panel-head {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-  background: #fbfdff;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: #eef3fd;
+  border-bottom: 1px solid #d4deef;
 }
 
-.pm-task-assignee-input {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 7px 9px;
-  font-family: inherit;
-  font-size: 12px;
-}
-
-.pm-task-assignee-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.pm-task-assignee-cancel,
-.pm-task-assignee-save {
-  border-radius: 7px;
-  padding: 6px 9px;
+.pm-assignee-panel-head-title {
   font-size: 11px;
   font-weight: 700;
+  color: #3054a0;
+  letter-spacing: 0.01em;
+}
+
+.pm-assignee-panel-head-close {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: none;
+  color: #8094b8;
+  font-size: 13px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 0;
+  line-height: 1;
 }
 
-.pm-task-assignee-cancel {
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text-main);
+.pm-assignee-panel-head-close:hover {
+  background: #d4deef;
+  color: #3054a0;
 }
 
-.pm-task-assignee-save {
-  border: 1px solid var(--accent);
-  background: var(--accent);
+/* ─ Panel sections ─ */
+.pm-assignee-section {
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf1f9;
+}
+
+.pm-assignee-section:last-child {
+  border-bottom: none;
+}
+
+.pm-assignee-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7a8aa8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+/* ─ Current assignee chips ─ */
+.pm-assignee-current-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pm-assignee-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 20px;
+  background: #e8effc;
+  border: 1px solid #cdd8f0;
+}
+
+.pm-assignee-chip-dot {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
   color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-assignee-chip-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2e4480;
+  white-space: nowrap;
+}
+
+/* ─ Available member list ─ */
+.pm-assignee-member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.pm-assignee-member-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: inherit;
+}
+
+.pm-assignee-member-row:hover {
+  background: #edf3ff;
+  border-color: #c4d4f0;
+}
+
+.pm-assignee-member-row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pm-assignee-member-dot {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pm-assignee-member-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+
+.pm-assignee-member-detail-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #222c42;
+  line-height: 1.25;
+}
+
+.pm-assignee-member-detail-code {
+  font-size: 9px;
+  color: #8094b8;
+  line-height: 1.2;
+}
+
+.pm-assignee-member-add-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #dfe8fa;
+  color: #2860c5;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+
+.pm-assignee-member-row:hover .pm-assignee-member-add-icon {
+  background: #c4d7f7;
+}
+
+/* Inactive member styling in project form */
+.pm-project-member-inactive {
+  opacity: 0.55;
+  background: #f5f5f7 !important;
+  border-color: #ddd !important;
+}
+
+.pm-project-member-status-badge {
+  display: inline;
+  font-size: 9px;
+  color: #b33a3a;
+  font-style: italic;
+  font-weight: 500;
+  margin-left: 2px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .pm-trash-panel {
@@ -1577,5 +2206,17 @@ tbody td:first-child {
 
   .pm-task-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .pm-project-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pm-project-modal-backdrop {
+    padding: 10px;
+  }
+
+  .pm-project-modal {
+    max-height: calc(100vh - 20px);
   }
 }

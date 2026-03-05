@@ -5,6 +5,11 @@ import Image from "next/image";
 
 type TaskStatusKey = "todo" | "in_progress" | "done";
 
+type TaskAssignee = {
+  ma_nhan_vien: string;
+  ten_nv: string;
+};
+
 type PersonalTask = {
   ma_cong_viec: string;
   tieu_de: string;
@@ -12,11 +17,15 @@ type PersonalTask = {
   do_uu_tien: string | null;
   ngay_tao: string | null;
   han_hoan_thanh: string | null;
-  ma_nhan_vien_phu_trach: string | null;
-  ten_nguoi_phu_trach: string | null;
   ma_du_an: string | null;
   ten_du_an: string | null;
   status_key: TaskStatusKey;
+  assignees?: TaskAssignee[];
+};
+
+type ProjectMemberItem = {
+  ma_nhan_vien: string;
+  ten_nv: string;
 };
 
 type Props = {
@@ -24,6 +33,7 @@ type Props = {
   selectedProjectName: string;
   initialTasks: PersonalTask[];
   isSortEnabled: boolean;
+  projectMembers?: ProjectMemberItem[];
 };
 
 type CreateFormState = {
@@ -48,7 +58,6 @@ function parseSqlDateTime(dateValue: string | null) {
   let date = new Date(raw);
   if (!Number.isNaN(date.getTime())) return date;
 
-  // SQL Server often returns "YYYY-MM-DD HH:mm:ss(.sss)".
   const normalized = raw.replace(" ", "T");
   date = new Date(normalized);
   if (!Number.isNaN(date.getTime())) return date;
@@ -107,7 +116,7 @@ function getDeadlineState(task: PersonalTask): "normal" | "due_soon" | "overdue"
   return "normal";
 }
 
-export default function TaskColumnsClient({ selectedProjectId, selectedProjectName, initialTasks, isSortEnabled }: Props) {
+export default function TaskColumnsClient({ selectedProjectId, selectedProjectName, initialTasks, isSortEnabled, projectMembers = [] }: Props) {
   const [tasks, setTasks] = useState<PersonalTask[]>(
     initialTasks.map((task) => ({
       ...task,
@@ -120,7 +129,6 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropStatus, setDropStatus] = useState<TaskStatusKey | null>(null);
   const [assigneeTaskId, setAssigneeTaskId] = useState<string | null>(null);
-  const [assigneeCode, setAssigneeCode] = useState("");
   const [addingAssignee, setAddingAssignee] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [form, setForm] = useState<CreateFormState>(DEFAULT_FORM);
@@ -201,11 +209,7 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
     setTasks((prev) =>
       prev.map((task) =>
         task.ma_cong_viec === taskId
-          ? {
-              ...task,
-              status_key: nextStatus,
-              trang_thai_cong_viec: statusToLabel(nextStatus),
-            }
+          ? { ...task, status_key: nextStatus, trang_thai_cong_viec: statusToLabel(nextStatus) }
           : task,
       ),
     );
@@ -222,11 +226,7 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
         setTasks((prev) =>
           prev.map((task) =>
             task.ma_cong_viec === taskId
-              ? {
-                  ...task,
-                  status_key: previousStatus,
-                  trang_thai_cong_viec: statusToLabel(previousStatus),
-                }
+              ? { ...task, status_key: previousStatus, trang_thai_cong_viec: statusToLabel(previousStatus) }
               : task,
           ),
         );
@@ -236,11 +236,7 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
       setTasks((prev) =>
         prev.map((task) =>
           task.ma_cong_viec === taskId
-            ? {
-                ...task,
-                status_key: previousStatus,
-                trang_thai_cong_viec: statusToLabel(previousStatus),
-              }
+            ? { ...task, status_key: previousStatus, trang_thai_cong_viec: statusToLabel(previousStatus) }
             : task,
         ),
       );
@@ -267,10 +263,18 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
     setError("");
   }
 
-  async function addAssignee(taskId: string) {
-    const ma_nhan_vien = assigneeCode.trim().toUpperCase();
-    if (!ma_nhan_vien) {
-      setError("Vui lòng nhập mã nhân viên.");
+  // Nhiệm vụ 1: Thêm người làm chung (append) thay vì thay thế
+  async function addAssignee(taskId: string, memberId: string) {
+    if (!memberId) {
+      setError("Vui lòng chọn thành viên.");
+      return;
+    }
+
+    // Check if already assigned
+    const currentTask = tasks.find((t) => t.ma_cong_viec === taskId);
+    const currentAssignees = currentTask?.assignees || [];
+    if (currentAssignees.some((a) => a.ma_nhan_vien === memberId)) {
+      setError("Thành viên này đã được thêm vào công việc.");
       return;
     }
 
@@ -280,7 +284,7 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
       const response = await fetch(`/api/tasks/personal/${encodeURIComponent(taskId)}/assignees`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ma_nhan_vien }),
+        body: JSON.stringify({ ma_nhan_vien: memberId }),
       });
 
       const data = (await response.json().catch(() => ({}))) as {
@@ -293,22 +297,21 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
         return;
       }
 
-      if (data.assignee?.ten_nv) {
+      if (data.assignee?.ma_nhan_vien && data.assignee?.ten_nv) {
+        const newAssignee: TaskAssignee = {
+          ma_nhan_vien: data.assignee.ma_nhan_vien,
+          ten_nv: data.assignee.ten_nv,
+        };
         setTasks((prev) =>
           prev.map((task) =>
             task.ma_cong_viec === taskId
-              ? {
-                  ...task,
-                  ma_nhan_vien_phu_trach: data.assignee?.ma_nhan_vien || task.ma_nhan_vien_phu_trach,
-                  ten_nguoi_phu_trach: data.assignee?.ten_nv || task.ten_nguoi_phu_trach,
-                }
+              ? { ...task, assignees: [...(task.assignees || []), newAssignee] }
               : task,
           ),
         );
       }
 
       setAssigneeTaskId(null);
-      setAssigneeCode("");
     } catch {
       setError("Không thể kết nối máy chủ.");
     } finally {
@@ -394,6 +397,82 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
     );
   }
 
+  // Nhiệm vụ 2: Thiết kế lại phần chọn thành viên
+  function renderAssigneePanel(task: PersonalTask) {
+    if (assigneeTaskId !== task.ma_cong_viec) return null;
+    const currentAssignees = task.assignees || [];
+    const currentAssigneeIds = new Set(currentAssignees.map((a) => a.ma_nhan_vien));
+    const availableMembers = projectMembers.filter((m) => !currentAssigneeIds.has(m.ma_nhan_vien));
+
+    return (
+      <div className="pm-assignee-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="pm-assignee-panel-head">
+          <span className="pm-assignee-panel-head-title">Thêm người làm chung</span>
+          <button
+            className="pm-assignee-panel-head-close"
+            type="button"
+            onClick={() => setAssigneeTaskId(null)}
+          >
+            ✕
+          </button>
+        </div>
+
+        {currentAssignees.length > 0 && (
+          <div className="pm-assignee-section">
+            <div className="pm-assignee-section-title">Đang phụ trách ({currentAssignees.length})</div>
+            <div className="pm-assignee-current-chips">
+              {currentAssignees.map((a, idx) => {
+                const colors = ["#4f8ef7", "#20b486", "#f08a4b", "#8b78f7", "#ef5f8f"];
+                return (
+                  <div key={a.ma_nhan_vien} className="pm-assignee-chip-item">
+                    <span className="pm-assignee-chip-dot" style={{ backgroundColor: colors[idx % colors.length] }}>
+                      {toInitials(a.ten_nv)}
+                    </span>
+                    <span className="pm-assignee-chip-text">{a.ten_nv}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="pm-assignee-section">
+          <div className="pm-assignee-section-title">
+            {availableMembers.length > 0
+              ? `Chọn thành viên để thêm (${availableMembers.length})`
+              : "Tất cả thành viên đã được thêm"}
+          </div>
+          {availableMembers.length > 0 && (
+            <div className="pm-assignee-member-list">
+              {availableMembers.map((member) => {
+                return (
+                  <button
+                    key={member.ma_nhan_vien}
+                    className="pm-assignee-member-row"
+                    type="button"
+                    disabled={addingAssignee}
+                    onClick={() => void addAssignee(task.ma_cong_viec, member.ma_nhan_vien)}
+                  >
+                    <span className="pm-assignee-member-dot" style={{ backgroundColor: "#4f8ef7" }}>
+                      {toInitials(member.ten_nv)}
+                    </span>
+                    <span className="pm-assignee-member-detail">
+                      <span className="pm-assignee-member-detail-name">{member.ten_nv}</span>
+                      <span className="pm-assignee-member-detail-code">{member.ma_nhan_vien}</span>
+                    </span>
+                    <span className="pm-assignee-member-add-icon">
+                      {addingAssignee ? "…" : "+"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderColumn(status: TaskStatusKey, title: string, columnTasks: PersonalTask[]) {
     const isDropTarget = dropStatus === status;
     return (
@@ -420,91 +499,93 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
           {columnTasks.length === 0 ? (
             <p className="pm-task-empty">Chưa có công việc.</p>
           ) : (
-            columnTasks.map((task) => (
-              <article
-                key={task.ma_cong_viec}
-                className={`pm-task-card${draggingTaskId === task.ma_cong_viec ? " pm-task-card-dragging" : ""}${
-                  task.status_key === "done"
+            columnTasks.map((task) => {
+              const assignees = task.assignees || [];
+              return (
+                <article
+                  key={task.ma_cong_viec}
+                  className={`pm-task-card${draggingTaskId === task.ma_cong_viec ? " pm-task-card-dragging" : ""}${task.status_key === "done"
                     ? " pm-task-card-done"
                     : getDeadlineState(task) === "overdue"
                       ? " pm-task-card-overdue"
                       : getDeadlineState(task) === "due_soon"
                         ? " pm-task-card-due-soon"
                         : ""
-                }`}
-                draggable
-                onDragStart={() => onDragStart(task.ma_cong_viec)}
-                onDragEnd={() => {
-                  setDraggingTaskId(null);
-                  setDropStatus(null);
-                }}
-              >
-                <button
-                  className="pm-task-assignee-plus"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setError("");
-                    setAssigneeTaskId((prev) => (prev === task.ma_cong_viec ? null : task.ma_cong_viec));
-                    setAssigneeCode("");
-                  }}
-                  title="Thêm người làm"
-                >
-                  +
-                </button>
-                <button
-                  className="pm-task-delete-btn"
-                  type="button"
-                  title="Xóa công việc"
-                  disabled={deletingTaskId === task.ma_cong_viec}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void deleteTask(task.ma_cong_viec);
+                    }`}
+                  draggable
+                  onDragStart={() => onDragStart(task.ma_cong_viec)}
+                  onDragEnd={() => {
+                    setDraggingTaskId(null);
+                    setDropStatus(null);
                   }}
                 >
-                  <Image src="/icon/bin.png" alt="Delete" width={14} height={14} />
-                </button>
-                <h4>{task.tieu_de}</h4>
-                <p>Mã: {task.ma_cong_viec}</p>
-                <p>Dự án: {task.ten_du_an || selectedProjectName}</p>
-                <p>Tạo lúc: {formatCreatedAt(task.ngay_tao)}</p>
-                <p>Hạn: {formatDueDate(task.han_hoan_thanh)}</p>
-                <div className="pm-task-assignee">
-                  <span className="pm-task-assignee-avatar">{toInitials(task.ten_nguoi_phu_trach)}</span>
-                  <span className="pm-task-assignee-name">{task.ten_nguoi_phu_trach || "Người phụ trách"}</span>
-                </div>
-                {assigneeTaskId === task.ma_cong_viec ? (
-                  <div className="pm-task-assignee-form">
-                    <input
-                      className="pm-task-assignee-input"
-                      placeholder="Mã NV, ví dụ: NV02"
-                      value={assigneeCode}
-                      onChange={(e) => setAssigneeCode(e.target.value)}
-                    />
-                    <div className="pm-task-assignee-actions">
-                      <button
-                        className="pm-task-assignee-cancel"
-                        type="button"
-                        onClick={() => {
-                          setAssigneeTaskId(null);
-                          setAssigneeCode("");
-                        }}
-                      >
-                        Hủy
-                      </button>
-                      <button
-                        className="pm-task-assignee-save"
-                        type="button"
-                        disabled={addingAssignee}
-                        onClick={() => void addAssignee(task.ma_cong_viec)}
-                      >
-                        {addingAssignee ? "Đang thêm..." : "Thêm"}
-                      </button>
-                    </div>
+                  <button
+                    className="pm-task-assignee-plus"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setError("");
+                      setAssigneeTaskId((prev) => (prev === task.ma_cong_viec ? null : task.ma_cong_viec));
+                    }}
+                    title="Thêm người làm chung"
+                  >
+                    +
+                  </button>
+                  <button
+                    className="pm-task-delete-btn"
+                    type="button"
+                    title="Xóa công việc"
+                    disabled={deletingTaskId === task.ma_cong_viec}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void deleteTask(task.ma_cong_viec);
+                    }}
+                  >
+                    <Image src="/icon/bin.png" alt="Delete" width={14} height={14} />
+                  </button>
+                  <h4>{task.tieu_de}</h4>
+                  <p>Mã: {task.ma_cong_viec}</p>
+                  <p>Dự án: {task.ten_du_an || selectedProjectName}</p>
+                  <p>Tạo lúc: {formatCreatedAt(task.ngay_tao)}</p>
+                  <p>Hạn: {formatDueDate(task.han_hoan_thanh)}</p>
+
+                  {/* Hiển thị tất cả người phụ trách */}
+                  <div className="pm-task-assignees-row">
+                    {assignees.length === 0 ? (
+                      <span className="pm-task-assignee-none">Chưa có người phụ trách</span>
+                    ) : (
+                      <>
+                        <div className="pm-task-assignee-avatar-group">
+                          {assignees.slice(0, 4).map((a, idx) => {
+                            const colors = ["#4f8ef7", "#20b486", "#f08a4b", "#8b78f7", "#ef5f8f"];
+                            return (
+                              <span
+                                key={a.ma_nhan_vien}
+                                className="pm-task-avatar"
+                                style={{ backgroundColor: colors[idx % colors.length], zIndex: 10 - idx }}
+                                title={a.ten_nv}
+                              >
+                                {toInitials(a.ten_nv)}
+                              </span>
+                            );
+                          })}
+                          {assignees.length > 4 && (
+                            <span className="pm-task-avatar pm-task-avatar-extra">
+                              +{assignees.length - 4}
+                            </span>
+                          )}
+                        </div>
+                        <span className="pm-task-assignee-label">
+                          {assignees.map((a) => a.ten_nv).join(", ")}
+                        </span>
+                      </>
+                    )}
                   </div>
-                ) : null}
-              </article>
-            ))
+
+                  {renderAssigneePanel(task)}
+                </article>
+              );
+            })
           )}
         </div>
 
@@ -537,4 +618,3 @@ export default function TaskColumnsClient({ selectedProjectId, selectedProjectNa
     </>
   );
 }
-

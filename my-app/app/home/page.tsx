@@ -3,8 +3,10 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import AvatarMenu from "./AvatarMenu";
+import ProjectPickerClient from "./ProjectPickerClient";
 import TaskColumnsClient from "./TaskColumnsClient";
 import TrashTasksClient from "./TrashTasksClient";
+import TrashProjectsClient from "./TrashProjectsClient";
 
 type HeaderIcon = {
   title: string;
@@ -15,16 +17,16 @@ type HeaderIcon = {
 
 type HomePageProps = {
   searchParams?:
-    | {
-        view?: string | string[];
-        sort?: string | string[];
-        project?: string | string[];
-      }
-    | Promise<{
-        view?: string | string[];
-        sort?: string | string[];
-        project?: string | string[];
-      }>;
+  | {
+    view?: string | string[];
+    sort?: string | string[];
+    project?: string | string[];
+  }
+  | Promise<{
+    view?: string | string[];
+    sort?: string | string[];
+    project?: string | string[];
+  }>;
 };
 
 type ProfileUser = {
@@ -49,11 +51,10 @@ type PersonalTask = {
   do_uu_tien: string | null;
   ngay_tao: string | null;
   han_hoan_thanh: string | null;
-  ma_nhan_vien_phu_trach: string | null;
-  ten_nguoi_phu_trach: string | null;
   ma_du_an: string | null;
   ten_du_an: string | null;
   status_key: TaskStatusKey;
+  assignees?: { ma_nhan_vien: string; ten_nv: string }[];
 };
 
 type PersonalTasksResponse = {
@@ -74,10 +75,27 @@ type DeletedTasksResponse = {
   error?: string;
 };
 
+type DeletedProject = {
+  ma_du_an: string;
+  ten_du_an: string;
+  ma_phong_ban: string | null;
+};
+
+type DeletedProjectsResponse = {
+  projects?: DeletedProject[];
+  error?: string;
+};
+
 type PersonalProject = {
   ma_du_an: string;
   ten_du_an: string;
   so_luong_cong_viec: number;
+  ma_phong_ban?: string | null;
+};
+
+type PersonalProjectsResponse = {
+  projects?: PersonalProject[];
+  error?: string;
 };
 
 const headerIcons: HeaderIcon[] = [
@@ -149,6 +167,56 @@ async function getPersonalTasks(accessToken: string): Promise<PersonalTasksRespo
   }
 }
 
+async function getPersonalProjects(accessToken: string): Promise<PersonalProjectsResponse> {
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+
+  try {
+    const response = await fetch(`${backendUrl}/projects/personal`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => ({}))) as PersonalProjectsResponse;
+    if (!response.ok || !Array.isArray(data.projects)) {
+      return { error: data.error || "KhÃ´ng thá»ƒ táº£i dá»± Ã¡n cÃ¡ nhÃ¢n." };
+    }
+    return { projects: data.projects };
+  } catch {
+    return { error: "KhÃ´ng thá»ƒ káº¿t ná»‘i mÃ¡y chá»§ Ä‘á»ƒ táº£i dá»± Ã¡n cÃ¡ nhÃ¢n." };
+  }
+}
+
+type ProjectMember = {
+  ma_nhan_vien: string;
+  ten_nv: string;
+  ma_phong_ban: string | null;
+  vai_tro: string | null;
+};
+
+type ProjectMembersResponse = {
+  members?: ProjectMember[];
+  error?: string;
+};
+
+async function getProjectMembers(accessToken: string, projectId: string): Promise<ProjectMembersResponse> {
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+
+  try {
+    const response = await fetch(`${backendUrl}/projects/personal/${encodeURIComponent(projectId)}/members`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => ({}))) as ProjectMembersResponse;
+    if (!response.ok || !Array.isArray(data.members)) {
+      return { error: data.error || "Không thể tải thành viên dự án." };
+    }
+    return { members: data.members };
+  } catch {
+    return { error: "Không thể kết nối máy chủ để tải thành viên dự án." };
+  }
+}
+
 async function getDeletedTasks(accessToken: string): Promise<DeletedTasksResponse> {
   const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
 
@@ -165,6 +233,25 @@ async function getDeletedTasks(accessToken: string): Promise<DeletedTasksRespons
     return { tasks: data.tasks };
   } catch {
     return { error: "Không thể kết nối máy chủ để tải công việc đã xóa." };
+  }
+}
+
+async function getDeletedProjects(accessToken: string): Promise<DeletedProjectsResponse> {
+  const backendUrl = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+
+  try {
+    const response = await fetch(`${backendUrl}/projects/personal/deleted`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const data = (await response.json().catch(() => ({}))) as DeletedProjectsResponse;
+    if (!response.ok || !Array.isArray(data.projects)) {
+      return { error: data.error || "Không thể tải dự án đã xóa." };
+    }
+    return { projects: data.projects };
+  } catch {
+    return { error: "Không thể kết nối máy chủ để tải dự án đã xóa." };
   }
 }
 
@@ -188,8 +275,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const displayName = meResult?.user?.ten_nv ?? "";
   const initials = toInitials(displayName);
   const profile = isProfileView ? meResult : null;
+  const personalProjectResult = isPersonalTasksView && accessToken ? await getPersonalProjects(accessToken) : null;
   const personalTaskResult = isPersonalTasksView && accessToken ? await getPersonalTasks(accessToken) : null;
   const deletedTaskResult = isTrashView && accessToken ? await getDeletedTasks(accessToken) : null;
+  const deletedProjectResult = isTrashView && accessToken ? await getDeletedProjects(accessToken) : null;
   const selectedProjectId = typeof currentProject === "string" && currentProject.trim() ? currentProject.trim() : "";
   const allTasks = personalTaskResult?.tasks || [];
   const projectMap = new Map<string, PersonalProject>();
@@ -207,7 +296,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       });
     }
   }
-  const personalProjects = Array.from(projectMap.values()).sort((a, b) => a.ten_du_an.localeCompare(b.ten_du_an, "vi"));
+  const taskDerivedProjects = Array.from(projectMap.values()).sort((a, b) => a.ten_du_an.localeCompare(b.ten_du_an, "vi"));
+  const personalProjects = (personalProjectResult?.projects || taskDerivedProjects)
+    .slice()
+    .sort((a, b) => a.ten_du_an.localeCompare(b.ten_du_an, "vi"));
   const selectedProject = personalProjects.find((item) => item.ma_du_an === selectedProjectId) || null;
   const projectTasks = selectedProjectId
     ? allTasks.filter((task) => (task.ma_du_an || task.ten_du_an || "").trim() === selectedProjectId)
@@ -221,6 +313,40 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     const bTime = b.han_hoan_thanh ? new Date(b.han_hoan_thanh).getTime() : Number.MAX_SAFE_INTEGER;
     return aTime - bTime;
   });
+  // Nhiệm vụ 3: Fetch real project members from thanh_vien_nhom
+  const projectMembersResult =
+    isPersonalTasksView && accessToken && selectedProjectId
+      ? await getProjectMembers(accessToken, selectedProjectId)
+      : null;
+
+  const projectMembers = (() => {
+    // Use real members from API if available
+    const apiMembers = projectMembersResult?.members;
+    if (apiMembers && apiMembers.length > 0) {
+      return apiMembers.map((m) => ({
+        id: m.ma_nhan_vien,
+        name: m.ten_nv,
+        initials: toInitials(m.ten_nv),
+        ma_nhan_vien: m.ma_nhan_vien,
+      })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    }
+    // Fallback: derive from task assignees
+    const memberMap = new Map<string, { id: string; name: string; initials: string; ma_nhan_vien: string }>();
+    for (const task of projectTasks) {
+      const assignees = task.assignees || [];
+      for (const a of assignees) {
+        if (!memberMap.has(a.ma_nhan_vien)) {
+          memberMap.set(a.ma_nhan_vien, {
+            id: a.ma_nhan_vien,
+            name: a.ten_nv,
+            initials: toInitials(a.ten_nv),
+            ma_nhan_vien: a.ma_nhan_vien,
+          });
+        }
+      }
+    }
+    return Array.from(memberMap.values()).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  })();
 
   return (
     <div className="pm-home">
@@ -282,6 +408,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
           <Link href="/home?view=trash" className={`trash-sub ${isTrashView ? "active" : ""}`}>
             <span style={{ fontSize: 13 }}>🔄</span> Công việc đã xóa
+          </Link>
+          <Link href="/home?view=trash" className={`trash-sub ${isTrashView ? "active" : ""}`}>
+            <span style={{ fontSize: 13 }}>📁</span> Dự án đã xóa
           </Link>
         </div>
       </aside>
@@ -387,36 +516,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     </div>
                   </section>
 
+                  {personalProjectResult?.error ? <p className="pm-profile-error">{personalProjectResult.error}</p> : null}
                   {personalTaskResult?.error ? <p className="pm-profile-error">{personalTaskResult.error}</p> : null}
 
-                  <div className="pm-project-grid">
-                    {personalProjects.map((project) => (
-                      <Link
-                        key={project.ma_du_an}
-                        href={`/home?view=personal-tasks&project=${encodeURIComponent(project.ma_du_an)}`}
-                        className="pm-project-card"
-                      >
-                        <div className="pm-project-card-head">
-                          <h3>{project.ten_du_an}</h3>
-                          <span className="pm-project-count">{project.so_luong_cong_viec}</span>
-                        </div>
-                        <dl className="pm-project-info">
-                          <div>
-                            <dt>Mã dự án</dt>
-                            <dd>{project.ma_du_an}</dd>
-                          </div>
-                          <div>
-                            <dt>Công việc</dt>
-                            <dd>{project.so_luong_cong_viec} mục</dd>
-                          </div>
-                        </dl>
-                        <div className="pm-project-card-cta">Vào công việc dự án</div>
-                      </Link>
-                    ))}
-                    {!personalTaskResult?.error && personalProjects.length === 0 ? (
-                      <div className="pm-project-empty">Bạn chưa tham gia dự án nào.</div>
-                    ) : null}
-                  </div>
+                  <ProjectPickerClient initialProjects={personalProjects} />
                 </>
               ) : (
                 <>
@@ -425,6 +528,49 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       Quay lại chọn dự án
                     </Link>
                     <span className="pm-current-project">{selectedProject?.ten_du_an || selectedProjectId}</span>
+                    <div className="pm-project-members">
+                      <span className="pm-project-members-label">Các thành viên dự án</span>
+                      <div className="pm-project-member-avatars">
+                        {projectMembers.length === 0 ? (
+                          <span className="pm-project-members-empty">Chưa có</span>
+                        ) : (
+                          projectMembers.slice(0, 5).map((member, idx) => (
+                            <span
+                              key={member.id}
+                              className={`pm-project-member-avatar pm-project-member-avatar-${(idx % 5) + 1}`}
+                              title={member.name}
+                              style={{ zIndex: 20 - idx }}
+                            >
+                              {member.initials}
+                            </span>
+                          ))
+                        )}
+                        {projectMembers.length > 5 ? (
+                          <span className="pm-project-member-more">+{projectMembers.length - 5}</span>
+                        ) : null}
+                      </div>
+                      <details className="pm-project-members-menu">
+                        <summary className="pm-project-members-more" aria-label="Mở danh sách thành viên">
+                          ...
+                        </summary>
+                        <div className="pm-project-members-dropdown">
+                          {projectMembers.length === 0 ? (
+                            <p className="pm-project-members-empty-list">Không có thành viên trong dự án.</p>
+                          ) : (
+                            <ul className="pm-project-members-list">
+                              {projectMembers.map((member, idx) => (
+                                <li key={`${member.id}-list`}>
+                                  <span className={`pm-project-members-list-avatar pm-project-member-avatar-${(idx % 5) + 1}`}>
+                                    {member.initials}
+                                  </span>
+                                  <span className="pm-project-members-list-name">{member.name}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </details>
+                    </div>
                   </div>
 
                   <div className="pm-task-tools">
@@ -481,6 +627,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     selectedProjectName={selectedProject?.ten_du_an || selectedProjectId}
                     initialTasks={taskList}
                     isSortEnabled={isSortEnabled}
+                    projectMembers={projectMembers.map((m) => ({ ma_nhan_vien: m.id, ten_nv: m.name }))}
                   />
                 </>
               )}
@@ -491,6 +638,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 <p className="pm-profile-error">{deletedTaskResult.error}</p>
               ) : (
                 <TrashTasksClient initialTasks={deletedTaskResult?.tasks || []} />
+              )}
+              {deletedProjectResult?.error ? (
+                <p className="pm-profile-error">{deletedProjectResult.error}</p>
+              ) : (
+                <TrashProjectsClient initialProjects={deletedProjectResult?.projects || []} />
               )}
             </>
           ) : (
