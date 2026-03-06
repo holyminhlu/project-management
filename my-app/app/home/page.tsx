@@ -12,6 +12,7 @@ import AnalyticsDashboardClient from "./AnalyticsDashboardClient";
 import EisenhowerMatrixClient from "./EisenhowerMatrixClient";
 import TasksOverTimeClient from "./TasksOverTimeClient";
 import TasksByAssigneeClient from "./TasksByAssigneeClient";
+import TasksByRelatedClient from "./TasksByRelatedClient";
 
 type HeaderIcon = {
   title: string;
@@ -679,6 +680,24 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       </div>
                       <div className="pm-report-view-body pm-report-view-body-full">
                         <TasksByAssigneeClient />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Tasks By Related Person — full custom page
+                if (currentReport === "slcv-nguoi-lien-quan") {
+                  return (
+                    <div className="pm-report-view pm-report-chart-full">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "👥"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Số lượng CV theo người liên quan"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <TasksByRelatedClient />
                       </div>
                     </div>
                   );

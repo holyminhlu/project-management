@@ -2515,3 +2515,127 @@ app.get("/analytics/tasks-by-assignee", async (req, res) => {
   }
 });
 
+// ── Tasks By Related Person API ──────────────────────────────────────
+app.get("/analytics/tasks-by-related", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+
+    // 1. Per related-member summary: tasks they are related to (via thanh_vien_nhom)
+    const relatedQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           nv.ma_nhan_vien,
+           nv.ten_nv,
+           tvn.vai_tro,
+           COUNT(DISTINCT cv.ma_cong_viec) AS total,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện') THEN 1 ELSE 0 END) AS in_progress,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Cần thực hiện') OR cv.trang_thai_cong_viec IS NULL THEN 1 ELSE 0 END) AS todo,
+           SUM(CASE WHEN cv.han_hoan_thanh < GETDATE()
+                      AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành')
+                      THEN 1 ELSE 0 END) AS overdue
+         FROM dbo.thanh_vien_nhom tvn
+         INNER JOIN dbo.du_an da ON da.ma_nhom = tvn.ma_nhom
+         INNER JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+         INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = tvn.ma_nhan_vien
+         WHERE da.ma_du_an IN (
+           SELECT da2.ma_du_an FROM dbo.du_an da2
+           INNER JOIN dbo.thanh_vien_nhom tvn2 ON tvn2.ma_nhom = da2.ma_nhom
+           WHERE tvn2.ma_nhan_vien = @ma_nhan_vien
+         )
+         AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY nv.ma_nhan_vien, nv.ten_nv, tvn.vai_tro
+         ORDER BY total DESC`
+      );
+
+    const members = relatedQuery.recordset.map((r) => ({
+      id: r.ma_nhan_vien,
+      name: r.ten_nv || r.ma_nhan_vien,
+      role: r.vai_tro || "Thành viên",
+      total: r.total,
+      completed: r.completed,
+      in_progress: r.in_progress,
+      todo: r.todo,
+      overdue: r.overdue,
+      completion_rate: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
+    }));
+
+    // 2. Per-member by priority
+    const priorityQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           nv.ma_nhan_vien,
+           ISNULL(cv.do_uu_tien, N'Không xác định') AS priority,
+           COUNT(DISTINCT cv.ma_cong_viec) AS total
+         FROM dbo.thanh_vien_nhom tvn
+         INNER JOIN dbo.du_an da ON da.ma_nhom = tvn.ma_nhom
+         INNER JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+         INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = tvn.ma_nhan_vien
+         WHERE da.ma_du_an IN (
+           SELECT da2.ma_du_an FROM dbo.du_an da2
+           INNER JOIN dbo.thanh_vien_nhom tvn2 ON tvn2.ma_nhom = da2.ma_nhom
+           WHERE tvn2.ma_nhan_vien = @ma_nhan_vien
+         )
+         AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY nv.ma_nhan_vien, ISNULL(cv.do_uu_tien, N'Không xác định')
+         ORDER BY nv.ma_nhan_vien, total DESC`
+      );
+
+    const priorityMap = {};
+    for (const r of priorityQuery.recordset) {
+      if (!priorityMap[r.ma_nhan_vien]) priorityMap[r.ma_nhan_vien] = [];
+      priorityMap[r.ma_nhan_vien].push({ priority: r.priority, count: r.total });
+    }
+
+    const membersWithPriority = members.map((m) => ({
+      ...m,
+      by_priority: priorityMap[m.id] || [],
+    }));
+
+    // 3. Role distribution
+    const roleMap = {};
+    for (const m of members) {
+      if (!roleMap[m.role]) {
+        roleMap[m.role] = { count: 0, members: [] };
+      }
+      roleMap[m.role].count++;
+      roleMap[m.role].members.push({ id: m.id, name: m.name });
+    }
+    const by_role = Object.entries(roleMap).map(([role, data]) => ({
+      role,
+      count: data.count,
+      members: data.members
+    }));
+
+    // 4. Overall totals
+    const totalTasks = members.reduce((s, m) => s + m.total, 0);
+    const totalCompleted = members.reduce((s, m) => s + m.completed, 0);
+    const totalOverdue = members.reduce((s, m) => s + m.overdue, 0);
+
+    return res.json({
+      members: membersWithPriority,
+      by_role,
+      summary: {
+        total_members: members.length,
+        total_tasks: totalTasks,
+        total_completed: totalCompleted,
+        total_overdue: totalOverdue,
+        avg_tasks_per_member: members.length > 0 ? Math.round(totalTasks / members.length * 10) / 10 : 0,
+        avg_completion_rate: members.length > 0 ? Math.round(members.reduce((s, m) => s + m.completion_rate, 0) / members.length) : 0,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu theo người liên quan." });
+  }
+});
+
