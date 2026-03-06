@@ -1889,3 +1889,629 @@ app.get("/projects/personal/:ma_du_an/members", async (req, res) => {
   }
 });
 
+// ── Analytics Dashboard API ──────────────────────────────────────────
+app.get("/analytics/dashboard", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+    const hasThanhVienNhom = await tableExists(pool, "thanh_vien_nhom");
+
+    // 1. Task Status Distribution
+    const statusQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT cv.trang_thai_cong_viec, COUNT(*) AS total
+       FROM dbo.cong_viec cv
+       INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+       GROUP BY cv.trang_thai_cong_viec`
+    );
+
+    const statusMap = {};
+    let totalTasks = 0;
+    for (const row of statusQuery.recordset) {
+      const key = mapTaskStatusKey(row.trang_thai_cong_viec);
+      const label = row.trang_thai_cong_viec || "Chưa phân loại";
+      statusMap[key] = { label, count: row.total };
+      totalTasks += row.total;
+    }
+
+    // 2. Task counts by status key
+    const todoCount = (statusMap["todo"]?.count || 0);
+    const inProgressCount = (statusMap["in_progress"]?.count || 0);
+    const doneCount = (statusMap["done"]?.count || 0);
+    const progressPercent = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
+
+    // 3. Overdue tasks
+    const overdueQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT COUNT(*) AS overdue_count
+       FROM dbo.cong_viec cv
+       INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND cv.han_hoan_thanh < GETDATE()
+         AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa')
+         AND cv.trang_thai_cong_viec IS NOT NULL`
+    );
+    const overdueCount = overdueQuery.recordset[0]?.overdue_count || 0;
+
+    // 4. Workload per user (tasks assigned per team member in user's projects)
+    const workloadQuery = hasThanhVienNhom
+      ? await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+        `SELECT nv.ten_nv, nv.ma_nhan_vien,
+                  COUNT(DISTINCT cv.ma_cong_viec) AS task_count,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS done_count,
+                  SUM(CASE WHEN cv.han_hoan_thanh < GETDATE() AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa') THEN 1 ELSE 0 END) AS overdue_count
+           FROM dbo.du_an da
+           INNER JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+           INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = tvn.ma_nhan_vien
+           LEFT JOIN dbo.phu_trach pt2 ON pt2.ma_nhan_vien = nv.ma_nhan_vien
+           LEFT JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt2.ma_cong_viec
+                AND cv.ma_du_an = da.ma_du_an
+                AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+           WHERE da.ma_nhom IN (
+             SELECT tvn2.ma_nhom FROM dbo.thanh_vien_nhom tvn2 WHERE tvn2.ma_nhan_vien = @ma_nhan_vien
+           )
+           AND (da.trang_thai_du_an IS NULL OR da.trang_thai_du_an <> N'Đã bị gỡ')
+           GROUP BY nv.ten_nv, nv.ma_nhan_vien
+           ORDER BY task_count DESC`
+      )
+      : await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+        `SELECT nv.ten_nv, pt.ma_nhan_vien,
+                  COUNT(DISTINCT cv.ma_cong_viec) AS task_count,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS done_count,
+                  SUM(CASE WHEN cv.han_hoan_thanh < GETDATE() AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa') THEN 1 ELSE 0 END) AS overdue_count
+           FROM dbo.phu_trach pt
+           INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
+           INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = pt.ma_nhan_vien
+           WHERE cv.ma_du_an IN (
+             SELECT DISTINCT cv2.ma_du_an FROM dbo.phu_trach pt2
+             INNER JOIN dbo.cong_viec cv2 ON cv2.ma_cong_viec = pt2.ma_cong_viec
+             WHERE pt2.ma_nhan_vien = @ma_nhan_vien
+           )
+           AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+           GROUP BY nv.ten_nv, pt.ma_nhan_vien
+           ORDER BY task_count DESC`
+      );
+
+    const workload = workloadQuery.recordset.map((r) => ({
+      name: r.ten_nv,
+      ma_nhan_vien: r.ma_nhan_vien,
+      task_count: r.task_count,
+      done_count: r.done_count,
+      overdue_count: r.overdue_count,
+    }));
+
+    // 5. Project progress
+    const projectProgressQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      hasThanhVienNhom
+        ? `SELECT da.ma_du_an, da.ten_du_an, da.ngay_bat_dau, da.ngay_ket_thuc,
+                  COUNT(DISTINCT cv.ma_cong_viec) AS total_tasks,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS done_tasks,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện') THEN 1 ELSE 0 END) AS in_progress_tasks,
+                  SUM(CASE WHEN cv.han_hoan_thanh < GETDATE() AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa') THEN 1 ELSE 0 END) AS overdue_tasks
+           FROM dbo.du_an da
+           INNER JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+           LEFT JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+                AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+           WHERE tvn.ma_nhan_vien = @ma_nhan_vien
+             AND (da.trang_thai_du_an IS NULL OR da.trang_thai_du_an <> N'Đã bị gỡ')
+           GROUP BY da.ma_du_an, da.ten_du_an, da.ngay_bat_dau, da.ngay_ket_thuc
+           ORDER BY da.ten_du_an`
+        : `SELECT da.ma_du_an, da.ten_du_an, da.ngay_bat_dau, da.ngay_ket_thuc,
+                  COUNT(DISTINCT cv.ma_cong_viec) AS total_tasks,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS done_tasks,
+                  SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện') THEN 1 ELSE 0 END) AS in_progress_tasks,
+                  SUM(CASE WHEN cv.han_hoan_thanh < GETDATE() AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa') THEN 1 ELSE 0 END) AS overdue_tasks
+           FROM dbo.du_an da
+           INNER JOIN dbo.cong_viec cv ON cv.ma_du_an = da.ma_du_an
+           INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+           WHERE pt.ma_nhan_vien = @ma_nhan_vien
+             AND (da.trang_thai_du_an IS NULL OR da.trang_thai_du_an <> N'Đã bị gỡ')
+             AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+           GROUP BY da.ma_du_an, da.ten_du_an, da.ngay_bat_dau, da.ngay_ket_thuc
+           ORDER BY da.ten_du_an`
+    );
+
+    const projects = projectProgressQuery.recordset.map((r) => ({
+      ma_du_an: r.ma_du_an,
+      ten_du_an: r.ten_du_an,
+      ngay_bat_dau: toIsoOrNull(r.ngay_bat_dau),
+      ngay_ket_thuc: toIsoOrNull(r.ngay_ket_thuc),
+      total_tasks: r.total_tasks,
+      done_tasks: r.done_tasks,
+      in_progress_tasks: r.in_progress_tasks,
+      overdue_tasks: r.overdue_tasks,
+      progress_percent: r.total_tasks > 0 ? Math.round((r.done_tasks / r.total_tasks) * 100) : 0,
+    }));
+
+    // 6. Task completion trend (weekly, last 8 weeks)
+    const trendQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT
+         DATEPART(ISO_WEEK, cv.ngay_cap_nhat) AS week_num,
+         DATEPART(YEAR, cv.ngay_cap_nhat) AS year_num,
+         MIN(cv.ngay_cap_nhat) AS week_start,
+         COUNT(*) AS completed_count
+       FROM dbo.cong_viec cv
+       INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành')
+         AND cv.ngay_cap_nhat IS NOT NULL
+         AND cv.ngay_cap_nhat >= DATEADD(WEEK, -8, GETDATE())
+       GROUP BY DATEPART(ISO_WEEK, cv.ngay_cap_nhat), DATEPART(YEAR, cv.ngay_cap_nhat)
+       ORDER BY year_num, week_num`
+    );
+
+    const completionTrend = trendQuery.recordset.map((r) => ({
+      week: `W${r.week_num}`,
+      year: r.year_num,
+      week_start: toIsoOrNull(r.week_start),
+      completed: r.completed_count,
+    }));
+
+    // 7. Overdue tasks by project
+    const overdueByProjectQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT da.ten_du_an, COUNT(*) AS overdue_count
+       FROM dbo.cong_viec cv
+       INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+       LEFT JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND cv.han_hoan_thanh < GETDATE()
+         AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa')
+         AND cv.trang_thai_cong_viec IS NOT NULL
+       GROUP BY da.ten_du_an
+       ORDER BY overdue_count DESC`
+    );
+
+    const overdueByProject = overdueByProjectQuery.recordset.map((r) => ({
+      project: r.ten_du_an || "Không xác định",
+      count: r.overdue_count,
+    }));
+
+    // 8. Average cycle time (days from ngay_tao to ngay_cap_nhat for completed tasks)
+    const cycleTimeQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT
+         AVG(DATEDIFF(HOUR, cv.ngay_tao, cv.ngay_cap_nhat) / 24.0) AS avg_cycle_days,
+         MIN(DATEDIFF(HOUR, cv.ngay_tao, cv.ngay_cap_nhat) / 24.0) AS min_cycle_days,
+         MAX(DATEDIFF(HOUR, cv.ngay_tao, cv.ngay_cap_nhat) / 24.0) AS max_cycle_days
+       FROM dbo.cong_viec cv
+       INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành')
+         AND cv.ngay_tao IS NOT NULL
+         AND cv.ngay_cap_nhat IS NOT NULL`
+    );
+
+    const cycleTime = {
+      avg_days: cycleTimeQuery.recordset[0]?.avg_cycle_days != null
+        ? parseFloat(Number(cycleTimeQuery.recordset[0].avg_cycle_days).toFixed(1))
+        : null,
+      min_days: cycleTimeQuery.recordset[0]?.min_cycle_days != null
+        ? parseFloat(Number(cycleTimeQuery.recordset[0].min_cycle_days).toFixed(1))
+        : null,
+      max_days: cycleTimeQuery.recordset[0]?.max_cycle_days != null
+        ? parseFloat(Number(cycleTimeQuery.recordset[0].max_cycle_days).toFixed(1))
+        : null,
+    };
+
+    // 9. Unassigned tasks in user's projects
+    const unassignedQuery = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      hasThanhVienNhom
+        ? `SELECT COUNT(*) AS unassigned_count
+           FROM dbo.cong_viec cv
+           INNER JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
+           INNER JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+           LEFT JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+           WHERE tvn.ma_nhan_vien = @ma_nhan_vien
+             AND pt.ma_cong_viec IS NULL
+             AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+             AND (da.trang_thai_du_an IS NULL OR da.trang_thai_du_an <> N'Đã bị gỡ')`
+        : `SELECT 0 AS unassigned_count`
+    );
+    const unassignedCount = unassignedQuery.recordset[0]?.unassigned_count || 0;
+
+    return res.json({
+      summary: {
+        total_tasks: totalTasks,
+        todo: todoCount,
+        in_progress: inProgressCount,
+        done: doneCount,
+        overdue: overdueCount,
+        unassigned: unassignedCount,
+        progress_percent: progressPercent,
+      },
+      status_distribution: statusMap,
+      workload,
+      projects,
+      completion_trend: completionTrend,
+      overdue_by_project: overdueByProject,
+      cycle_time: cycleTime,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu phân tích." });
+  }
+});
+
+// ── Eisenhower Matrix API ────────────────────────────────────────────
+app.get("/analytics/eisenhower", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+
+    // Fetch all active tasks for the user
+    const result = await pool.request().input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien).query(
+      `SELECT
+         cv.ma_cong_viec,
+         cv.tieu_de,
+         cv.mo_ta,
+         cv.trang_thai_cong_viec,
+         cv.do_uu_tien,
+         ISNULL(ISNULL(cv.ngay_tao, cv.ngay_cap_nhat), GETDATE()) AS ngay_tao,
+         cv.han_hoan_thanh,
+         cv.ngay_cap_nhat,
+         da.ma_du_an,
+         da.ten_du_an
+       FROM dbo.phu_trach pt
+       INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
+       LEFT JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
+       WHERE pt.ma_nhan_vien = @ma_nhan_vien
+         AND (cv.trang_thai_cong_viec IS NULL
+              OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa', N'Hoàn thành', N'Đã hoàn thành'))
+       ORDER BY cv.han_hoan_thanh ASC`
+    );
+
+    // Fetch assignees for all these tasks
+    const taskIds = result.recordset.map((r) => r.ma_cong_viec);
+    let assigneesMap = new Map();
+    if (taskIds.length > 0) {
+      const assigneeResult = await pool.request().query(
+        `SELECT pt2.ma_cong_viec, pt2.ma_nhan_vien, nv2.ten_nv
+         FROM dbo.phu_trach pt2
+         INNER JOIN dbo.nhan_vien nv2 ON nv2.ma_nhan_vien = pt2.ma_nhan_vien
+         WHERE pt2.ma_cong_viec IN (${taskIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})`
+      );
+      for (const row of assigneeResult.recordset) {
+        if (!assigneesMap.has(row.ma_cong_viec)) assigneesMap.set(row.ma_cong_viec, []);
+        assigneesMap.get(row.ma_cong_viec).push({ ma_nhan_vien: row.ma_nhan_vien, ten_nv: row.ten_nv });
+      }
+    }
+
+    const now = new Date();
+    const urgentThresholdMs = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+    // Classify each task into Eisenhower quadrants
+    const quadrants = {
+      do_first: [],      // Urgent + Important
+      schedule: [],      // Not Urgent + Important
+      delegate: [],      // Urgent + Not Important
+      eliminate: [],     // Not Urgent + Not Important
+    };
+
+    for (const row of result.recordset) {
+      const priority = (row.do_uu_tien || "").trim();
+      const deadline = row.han_hoan_thanh ? new Date(row.han_hoan_thanh) : null;
+
+      // Determine importance: priority "Cao" = important
+      const isImportant = priority.toLowerCase() === "cao";
+
+      // Determine urgency: overdue OR due within 3 days
+      let isUrgent = false;
+      if (deadline) {
+        const timeLeft = deadline.getTime() - now.getTime();
+        isUrgent = timeLeft <= urgentThresholdMs; // includes overdue (negative)
+      }
+      // If no deadline but high priority, not urgent by deadline but still important
+      // If no deadline and low priority, goes to eliminate
+
+      const daysUntilDeadline = deadline
+        ? Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+
+      const task = {
+        ma_cong_viec: row.ma_cong_viec,
+        tieu_de: row.tieu_de,
+        mo_ta: row.mo_ta || null,
+        trang_thai_cong_viec: row.trang_thai_cong_viec || null,
+        do_uu_tien: row.do_uu_tien || null,
+        ngay_tao: toIsoOrNull(row.ngay_tao),
+        han_hoan_thanh: toIsoOrNull(row.han_hoan_thanh),
+        ma_du_an: row.ma_du_an || null,
+        ten_du_an: row.ten_du_an || null,
+        status_key: mapTaskStatusKey(row.trang_thai_cong_viec),
+        assignees: assigneesMap.get(row.ma_cong_viec) || [],
+        is_urgent: isUrgent,
+        is_important: isImportant,
+        is_overdue: deadline ? deadline.getTime() < now.getTime() : false,
+        days_until_deadline: daysUntilDeadline,
+      };
+
+      if (isUrgent && isImportant) {
+        quadrants.do_first.push(task);
+      } else if (!isUrgent && isImportant) {
+        quadrants.schedule.push(task);
+      } else if (isUrgent && !isImportant) {
+        quadrants.delegate.push(task);
+      } else {
+        quadrants.eliminate.push(task);
+      }
+    }
+
+    const totalTasks = result.recordset.length;
+
+    return res.json({
+      quadrants,
+      summary: {
+        total: totalTasks,
+        do_first: quadrants.do_first.length,
+        schedule: quadrants.schedule.length,
+        delegate: quadrants.delegate.length,
+        eliminate: quadrants.eliminate.length,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi phân loại Eisenhower." });
+  }
+});
+
+// ── Tasks Over Time API ──────────────────────────────────────────────
+app.get("/analytics/tasks-over-time", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+    const months = Math.min(Math.max(parseInt(req.query.months) || 12, 3), 24);
+
+    // 1. Tasks created per month
+    const createdQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .input("months", sql.Int, months)
+      .query(
+        `SELECT
+           FORMAT(cv.ngay_tao, 'yyyy-MM') AS month_key,
+           YEAR(cv.ngay_tao) AS yr,
+           MONTH(cv.ngay_tao) AS mo,
+           COUNT(*) AS total
+         FROM dbo.cong_viec cv
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien
+           AND cv.ngay_tao IS NOT NULL
+           AND cv.ngay_tao >= DATEADD(MONTH, -@months, GETDATE())
+           AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY FORMAT(cv.ngay_tao, 'yyyy-MM'), YEAR(cv.ngay_tao), MONTH(cv.ngay_tao)
+         ORDER BY yr, mo`
+      );
+
+    // 2. Tasks completed per month (based on ngay_cap_nhat when status = done)
+    const completedQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .input("months", sql.Int, months)
+      .query(
+        `SELECT
+           FORMAT(cv.ngay_cap_nhat, 'yyyy-MM') AS month_key,
+           YEAR(cv.ngay_cap_nhat) AS yr,
+           MONTH(cv.ngay_cap_nhat) AS mo,
+           COUNT(*) AS total
+         FROM dbo.cong_viec cv
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien
+           AND cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành')
+           AND cv.ngay_cap_nhat IS NOT NULL
+           AND cv.ngay_cap_nhat >= DATEADD(MONTH, -@months, GETDATE())
+         GROUP BY FORMAT(cv.ngay_cap_nhat, 'yyyy-MM'), YEAR(cv.ngay_cap_nhat), MONTH(cv.ngay_cap_nhat)
+         ORDER BY yr, mo`
+      );
+
+    // 3. Tasks overdue per month (based on han_hoan_thanh)
+    const overdueQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .input("months", sql.Int, months)
+      .query(
+        `SELECT
+           FORMAT(cv.han_hoan_thanh, 'yyyy-MM') AS month_key,
+           YEAR(cv.han_hoan_thanh) AS yr,
+           MONTH(cv.han_hoan_thanh) AS mo,
+           COUNT(*) AS total
+         FROM dbo.cong_viec cv
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien
+           AND cv.han_hoan_thanh < GETDATE()
+           AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành', N'Đã bị xóa', N'Đã xóa')
+           AND cv.han_hoan_thanh IS NOT NULL
+           AND cv.han_hoan_thanh >= DATEADD(MONTH, -@months, GETDATE())
+         GROUP BY FORMAT(cv.han_hoan_thanh, 'yyyy-MM'), YEAR(cv.han_hoan_thanh), MONTH(cv.han_hoan_thanh)
+         ORDER BY yr, mo`
+      );
+
+    // Build a unified month list
+    const now = new Date();
+    const monthLabels = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = `T${d.getMonth() + 1}/${d.getFullYear()}`;
+      monthLabels.push({ key, label });
+    }
+
+    const createdMap = {};
+    for (const r of createdQuery.recordset) createdMap[r.month_key] = r.total;
+    const completedMap = {};
+    for (const r of completedQuery.recordset) completedMap[r.month_key] = r.total;
+    const overdueMap = {};
+    for (const r of overdueQuery.recordset) overdueMap[r.month_key] = r.total;
+
+    const timeline = monthLabels.map((m) => ({
+      month_key: m.key,
+      label: m.label,
+      created: createdMap[m.key] || 0,
+      completed: completedMap[m.key] || 0,
+      overdue: overdueMap[m.key] || 0,
+    }));
+
+    // 4. Status summary totals
+    const statusSummary = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Cần thực hiện') OR cv.trang_thai_cong_viec IS NULL THEN 1 ELSE 0 END) AS todo,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện') THEN 1 ELSE 0 END) AS in_progress,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS done,
+           COUNT(*) AS total
+         FROM dbo.cong_viec cv
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien
+           AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))`
+      );
+
+    const summary = statusSummary.recordset[0] || { todo: 0, in_progress: 0, done: 0, total: 0 };
+
+    // 5. Tasks by priority
+    const priorityQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           ISNULL(cv.do_uu_tien, N'Không xác định') AS priority,
+           COUNT(*) AS total
+         FROM dbo.cong_viec cv
+         INNER JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         WHERE pt.ma_nhan_vien = @ma_nhan_vien
+           AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY ISNULL(cv.do_uu_tien, N'Không xác định')
+         ORDER BY total DESC`
+      );
+
+    const by_priority = priorityQuery.recordset.map((r) => ({
+      priority: r.priority,
+      count: r.total,
+    }));
+
+    return res.json({ timeline, summary, by_priority, months });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu thống kê theo thời gian." });
+  }
+});
+
+// ── Tasks By Assignee API ────────────────────────────────────────────
+app.get("/analytics/tasks-by-assignee", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+
+    // 1. Per-assignee summary: total, completed, in_progress, todo, overdue
+    const assigneeQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           nv.ma_nhan_vien,
+           nv.ten_nv,
+           COUNT(cv.ma_cong_viec) AS total,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện') THEN 1 ELSE 0 END) AS in_progress,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Cần thực hiện') OR cv.trang_thai_cong_viec IS NULL THEN 1 ELSE 0 END) AS todo,
+           SUM(CASE WHEN cv.han_hoan_thanh < GETDATE()
+                      AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành')
+                      THEN 1 ELSE 0 END) AS overdue
+         FROM dbo.phu_trach pt
+         INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
+         INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = pt.ma_nhan_vien
+         WHERE cv.ma_cong_viec IN (
+           SELECT cv2.ma_cong_viec FROM dbo.cong_viec cv2
+           INNER JOIN dbo.phu_trach pt2 ON pt2.ma_cong_viec = cv2.ma_cong_viec
+           WHERE pt2.ma_nhan_vien = @ma_nhan_vien
+         )
+         AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY nv.ma_nhan_vien, nv.ten_nv
+         ORDER BY total DESC`
+      );
+
+    const assignees = assigneeQuery.recordset.map((r) => ({
+      id: r.ma_nhan_vien,
+      name: r.ten_nv || r.ma_nhan_vien,
+      total: r.total,
+      completed: r.completed,
+      in_progress: r.in_progress,
+      todo: r.todo,
+      overdue: r.overdue,
+      completion_rate: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
+    }));
+
+    // 2. Per-assignee by priority
+    const priorityQuery = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT
+           nv.ma_nhan_vien,
+           nv.ten_nv,
+           ISNULL(cv.do_uu_tien, N'Không xác định') AS priority,
+           COUNT(*) AS total
+         FROM dbo.phu_trach pt
+         INNER JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec
+         INNER JOIN dbo.nhan_vien nv ON nv.ma_nhan_vien = pt.ma_nhan_vien
+         WHERE cv.ma_cong_viec IN (
+           SELECT cv2.ma_cong_viec FROM dbo.cong_viec cv2
+           INNER JOIN dbo.phu_trach pt2 ON pt2.ma_cong_viec = cv2.ma_cong_viec
+           WHERE pt2.ma_nhan_vien = @ma_nhan_vien
+         )
+         AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         GROUP BY nv.ma_nhan_vien, nv.ten_nv, ISNULL(cv.do_uu_tien, N'Không xác định')
+         ORDER BY nv.ten_nv, total DESC`
+      );
+
+    // Build per-person priority map
+    const priorityMap = {};
+    for (const r of priorityQuery.recordset) {
+      if (!priorityMap[r.ma_nhan_vien]) priorityMap[r.ma_nhan_vien] = [];
+      priorityMap[r.ma_nhan_vien].push({ priority: r.priority, count: r.total });
+    }
+
+    // Add priority breakdown to each assignee
+    const assigneesWithPriority = assignees.map((a) => ({
+      ...a,
+      by_priority: priorityMap[a.id] || [],
+    }));
+
+    // 3. Overall totals
+    const totalTasks = assignees.reduce((s, a) => s + a.total, 0);
+    const totalCompleted = assignees.reduce((s, a) => s + a.completed, 0);
+    const totalOverdue = assignees.reduce((s, a) => s + a.overdue, 0);
+
+    return res.json({
+      assignees: assigneesWithPriority,
+      summary: {
+        total_members: assignees.length,
+        total_tasks: totalTasks,
+        total_completed: totalCompleted,
+        total_overdue: totalOverdue,
+        avg_tasks_per_member: assignees.length > 0 ? Math.round(totalTasks / assignees.length * 10) / 10 : 0,
+        avg_completion_rate: assignees.length > 0 ? Math.round(assignees.reduce((s, a) => s + a.completion_rate, 0) / assignees.length) : 0,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu theo người thực hiện." });
+  }
+});
+

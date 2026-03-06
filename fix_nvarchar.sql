@@ -1,4 +1,4 @@
-use quanly_duan
+﻿use quanly_duan
 
 ALTER TABLE vai_tro
 ALTER COLUMN ten_vai_tro NVARCHAR(100);
@@ -70,3 +70,18 @@ DELETE FROM phong_ban;
 DELETE FROM vai_tro;
 
 select * from cong_viec
+select * from auth_refresh_tokens
+select * from du_an
+select * from nhan_vien
+select * from cong_viec
+select * from phu_trach
+select * from nhom_nhan_vien
+select * from thanh_vien_nhom
+select * from phong_ban
+
+select ma_nhan_vien, ten_nv
+from nhan_vien inner join phong_ban on nhan_vien.ma_phong_ban = phong_ban.ma_phong_ban
+				inner join du_an on du_an.ma_phong_ban = phong_ban.ma_phong_ban
+WHERE ten_phong_ban = N'Phòng Nhân sự'
+
+

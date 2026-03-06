@@ -14,6 +14,8 @@ export const BACKENDS = {
   auth: process.env.BACKEND_AUTH_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:5000",
   tasks: process.env.BACKEND_TASKS_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:5000",
   projects: process.env.BACKEND_PROJECTS_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:5000",
+  analytics: process.env.BACKEND_ANALYTICS_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:5000",
 } as const;
+
 
 export type BackendName = keyof typeof BACKENDS;

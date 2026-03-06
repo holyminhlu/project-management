@@ -8,6 +8,10 @@ import ProjectPickerClient from "./ProjectPickerClient";
 import TaskColumnsClient from "./TaskColumnsClient";
 import TrashTasksClient from "./TrashTasksClient";
 import TrashProjectsClient from "./TrashProjectsClient";
+import AnalyticsDashboardClient from "./AnalyticsDashboardClient";
+import EisenhowerMatrixClient from "./EisenhowerMatrixClient";
+import TasksOverTimeClient from "./TasksOverTimeClient";
+import TasksByAssigneeClient from "./TasksByAssigneeClient";
 
 type HeaderIcon = {
   title: string;
@@ -22,11 +26,13 @@ type HomePageProps = {
     view?: string | string[];
     sort?: string | string[];
     project?: string | string[];
+    report?: string | string[];
   }
   | Promise<{
     view?: string | string[];
     sort?: string | string[];
     project?: string | string[];
+    report?: string | string[];
   }>;
 };
 
@@ -213,6 +219,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const isPersonalTasksView = currentView === "personal-tasks";
   const isTrashView = currentView === "trash";
   const isReportsView = currentView === "reports";
+  const isAnalyticsView = currentView === "analytics";
   const reportParam = resolvedSearchParams?.report;
   const currentReport = Array.isArray(reportParam) ? reportParam[0] : reportParam;
   const isSortEnabled = currentSort === "due_asc";
@@ -325,6 +332,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </span>{" "}
             Việc của tôi
           </div>
+          <Link href="/home?view=analytics" className={`nav-item ${isAnalyticsView ? "active" : ""}`}>
+            <span className="nav-icon">
+              <Image className="sidebar-icon-image" src="/icon/chart.png" alt="Analytics" width={16} height={16} />
+            </span>{" "}
+            Phân tích công việc
+          </Link>
           <details className="nav-group" open={isReportsView || undefined}>
             <summary className="nav-group-label">
               <span className="nav-icon">
@@ -616,6 +629,61 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   );
                 }
                 const info = reportLabels[currentReport];
+
+                // Eisenhower Matrix — full custom page
+                if (currentReport === "eisenhower") {
+                  return (
+                    <div className="pm-report-view pm-report-eisenhower">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "🎯"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Phân loại theo Eisenhower"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <EisenhowerMatrixClient />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Tasks Over Time — full custom page
+                if (currentReport === "slcv-thoi-gian") {
+                  return (
+                    <div className="pm-report-view pm-report-chart-full">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "📅"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Số lượng CV theo thời gian"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <TasksOverTimeClient />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Tasks By Assignee — full custom page
+                if (currentReport === "slcv-nguoi-thuc-hien") {
+                  return (
+                    <div className="pm-report-view pm-report-chart-full">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "👥"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Số lượng CV theo người thực hiện"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <TasksByAssigneeClient />
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="pm-report-view">
                     <div className="pm-report-view-header">
@@ -634,6 +702,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   </div>
                 );
               })()}
+            </section>
+          ) : isAnalyticsView ? (
+            <section className="pm-analytics" aria-label="Phân tích công việc">
+              <AnalyticsDashboardClient />
             </section>
           ) : isTrashView ? (
             <>
