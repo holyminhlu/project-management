@@ -2639,3 +2639,201 @@ app.get("/analytics/tasks-by-related", async (req, res) => {
   }
 });
 
+// ── Task Duration API ──────────────────────────────────────────────────
+app.get("/analytics/task-duration", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+
+    // Get all tasks relevant to user (phu_trach or thanh_vien_nhom)
+    const query = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT DISTINCT
+           cv.ma_cong_viec,
+           cv.tieu_de,
+           cv.trang_thai_cong_viec,
+           cv.ngay_tao,
+           cv.han_hoan_thanh,
+           DATEDIFF(day, cv.ngay_tao, cv.han_hoan_thanh) AS duration_days,
+           CASE 
+             WHEN cv.han_hoan_thanh < GETDATE() AND cv.trang_thai_cong_viec NOT IN (N'Hoàn thành', N'Đã hoàn thành') 
+             THEN DATEDIFF(day, cv.han_hoan_thanh, GETDATE())
+             ELSE 0 
+           END AS overdue_days
+         FROM dbo.cong_viec cv
+         LEFT JOIN dbo.phu_trach pt ON pt.ma_cong_viec = cv.ma_cong_viec
+         INNER JOIN dbo.du_an da ON da.ma_du_an = cv.ma_du_an
+         LEFT JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhom = da.ma_nhom
+         WHERE (pt.ma_nhan_vien = @ma_nhan_vien OR tvn.ma_nhan_vien = @ma_nhan_vien)
+           AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+           AND cv.ngay_tao IS NOT NULL
+           AND cv.han_hoan_thanh IS NOT NULL`
+      );
+
+    const tasks = query.recordset;
+
+    // 1. Phân loại theo thời lượng dự kiến
+    let within_1_day = 0;
+    let short_term = 0;  // 2-3
+    let mid_term = 0;    // 4-7
+    let long_term = 0;   // >7
+
+    // 2. Overdue summary
+    let on_time_active = 0;
+    let completed = 0;
+    let overdue_1_3 = 0;
+    let overdue_4_7 = 0;
+    let overdue_long = 0; // >7
+
+    // 3. Average duration logic
+    let total_duration_days = 0;
+    let total_overdue_days = 0;
+    let actual_overdue_count = 0;
+
+    for (const t of tasks) {
+      // Analyze duration bracket (Expected)
+      const d = t.duration_days;
+      if (d <= 1) within_1_day++;
+      else if (d <= 3) short_term++;
+      else if (d <= 7) mid_term++;
+      else long_term++;
+
+      total_duration_days += d > 0 ? d : 0;
+
+      // Analyze status / overdue
+      const isCompleted = t.trang_thai_cong_viec === "Hoàn thành" || t.trang_thai_cong_viec === "Đã hoàn thành";
+      if (isCompleted) {
+        completed++;
+      } else {
+        if (t.overdue_days > 0) {
+          actual_overdue_count++;
+          total_overdue_days += t.overdue_days;
+
+          if (t.overdue_days <= 3) overdue_1_3++;
+          else if (t.overdue_days <= 7) overdue_4_7++;
+          else overdue_long++;
+        } else {
+          on_time_active++;
+        }
+      }
+    }
+
+    const report = {
+      summary: {
+        total_tasks: tasks.length,
+        avg_expected_duration: tasks.length > 0 ? Math.round(total_duration_days / tasks.length * 10) / 10 : 0,
+        avg_overdue_days: actual_overdue_count > 0 ? Math.round(total_overdue_days / actual_overdue_count * 10) / 10 : 0,
+        total_overdue_tasks: actual_overdue_count,
+      },
+      duration_brackets: [
+        { label: "Trong ngày (≤ 1 ngày)", count: within_1_day, color: "#22c55e" },
+        { label: "Ngắn hạn (2-3 ngày)", count: short_term, color: "#3b82f6" },
+        { label: "Trung hạn (4-7 ngày)", count: mid_term, color: "#f59e0b" },
+        { label: "Dài hạn (> 7 ngày)", count: long_term, color: "#ef4444" },
+      ],
+      overdue_brackets: [
+        { label: "Đang làm/Đúng hạn", count: on_time_active, color: "#3b82f6" },
+        { label: "Trễ nhẹ (1-3 ngày)", count: overdue_1_3, color: "#facc15" },
+        { label: "Trễ vừa (4-7 ngày)", count: overdue_4_7, color: "#f97316" },
+        { label: "Trễ nghiêm trọng (> 7 ngày)", count: overdue_long, color: "#ef4444" },
+      ],
+      completed_count: completed
+    };
+
+    return res.json(report);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu thời gian thực hiện công việc." });
+  }
+});
+
+// ── Resource Allocation API ────────────────────────────────────────────
+app.get("/analytics/resource-allocation", async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Thiếu access token." });
+    let decoded;
+    try { decoded = verifyAccessToken(token); } catch { return res.status(401).json({ error: "Access token không hợp lệ." }); }
+    if (!decoded) return res.status(401).json({ error: "Access token không hợp lệ." });
+
+    const ma_nhan_vien = String(decoded.sub);
+    const pool = await poolPromise;
+
+    // Get all members in same projects as current user, and their task counts
+    const query = await pool.request()
+      .input("ma_nhan_vien", sql.VarChar(25), ma_nhan_vien)
+      .query(
+        `SELECT 
+           nv.ma_nhan_vien,
+           nv.ten_nv,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện', N'Cần thực hiện') OR cv.trang_thai_cong_viec IS NULL THEN 1 ELSE 0 END) AS active_tasks,
+           SUM(CASE WHEN cv.trang_thai_cong_viec IN (N'Hoàn thành', N'Đã hoàn thành') THEN 1 ELSE 0 END) AS completed_tasks,
+           COUNT(DISTINCT CASE WHEN cv.trang_thai_cong_viec IN (N'Đang thực hiện', N'Cần thực hiện') OR cv.trang_thai_cong_viec IS NULL THEN da.ma_du_an END) AS active_project_count
+         FROM dbo.nhan_vien nv
+         INNER JOIN dbo.thanh_vien_nhom tvn ON tvn.ma_nhan_vien = nv.ma_nhan_vien
+         INNER JOIN dbo.du_an da ON da.ma_nhom = tvn.ma_nhom
+         LEFT JOIN dbo.phu_trach pt ON pt.ma_nhan_vien = nv.ma_nhan_vien
+         LEFT JOIN dbo.cong_viec cv ON cv.ma_cong_viec = pt.ma_cong_viec AND cv.ma_du_an = da.ma_du_an AND (cv.trang_thai_cong_viec IS NULL OR cv.trang_thai_cong_viec NOT IN (N'Đã bị xóa', N'Đã xóa'))
+         WHERE tvn.ma_nhom IN (
+           SELECT tvn2.ma_nhom FROM dbo.thanh_vien_nhom tvn2 WHERE tvn2.ma_nhan_vien = @ma_nhan_vien
+         )
+         GROUP BY nv.ma_nhan_vien, nv.ten_nv
+         ORDER BY active_tasks DESC`
+      );
+
+    // Assume capacity rules:
+    // Optimal: 2-5 active tasks
+    // Overloaded: > 5 active tasks
+    // Underutilized: 0-1 active tasks
+    const OPTIMAL_MIN = 2;
+    const OPTIMAL_MAX = 5;
+
+    let overloaded = 0;
+    let underutilized = 0;
+    let optimal = 0;
+
+    const resources = query.recordset.map(r => {
+      let status = "optimal";
+      if (r.active_tasks > OPTIMAL_MAX) status = "overloaded";
+      else if (r.active_tasks < OPTIMAL_MIN) status = "underutilized";
+
+      if (status === "overloaded") overloaded++;
+      else if (status === "underutilized") underutilized++;
+      else optimal++;
+
+      return {
+        id: r.ma_nhan_vien,
+        name: r.ten_nv || r.ma_nhan_vien,
+        active_tasks: r.active_tasks,
+        completed_tasks: r.completed_tasks,
+        active_projects: r.active_project_count,
+        status,
+        capacity_rate: Math.min(Math.round((r.active_tasks / OPTIMAL_MAX) * 100), 200), // Max 200% logic
+      };
+    });
+
+    const total_tasks = resources.reduce((s, r) => s + r.active_tasks, 0);
+
+    return res.json({
+      summary: {
+        total_resources: resources.length,
+        total_active_tasks: total_tasks,
+        overloaded,
+        underutilized,
+        optimal
+      },
+      resources
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Lỗi máy chủ khi lấy dữ liệu phân bổ nguồn lực." });
+  }
+});
+

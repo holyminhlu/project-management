@@ -13,6 +13,8 @@ import EisenhowerMatrixClient from "./EisenhowerMatrixClient";
 import TasksOverTimeClient from "./TasksOverTimeClient";
 import TasksByAssigneeClient from "./TasksByAssigneeClient";
 import TasksByRelatedClient from "./TasksByRelatedClient";
+import TaskDurationClient from "./TaskDurationClient";
+import ResourceAllocationClient from "./ResourceAllocationClient";
 
 type HeaderIcon = {
   title: string;
@@ -698,6 +700,42 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                       </div>
                       <div className="pm-report-view-body pm-report-view-body-full">
                         <TasksByRelatedClient />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Task Duration — full custom page
+                if (currentReport === "thoi-gian-thuc-hien") {
+                  return (
+                    <div className="pm-report-view pm-report-chart-full">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "⏱️"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Thời gian thực hiện công việc"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <TaskDurationClient />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Resource Allocation — full custom page
+                if (currentReport === "phan-bo-nguon-luc") {
+                  return (
+                    <div className="pm-report-view pm-report-chart-full">
+                      <div className="pm-report-view-header">
+                        <span className="pm-report-view-icon">{info?.icon ?? "🎯"}</span>
+                        <div>
+                          <h2 className="pm-report-view-title">{info?.title ?? "Phân bổ nguồn lực"}</h2>
+                          {info?.desc ? <p className="pm-report-view-desc">{info.desc}</p> : null}
+                        </div>
+                      </div>
+                      <div className="pm-report-view-body pm-report-view-body-full">
+                        <ResourceAllocationClient />
                       </div>
                     </div>
                   );
